@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-from PyQt5.QtCore import QTimer, QLineF
-from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
-from PyQt5.QtGui import QIcon, QPainter, QPixmap, QColorConstants
 from psutil import virtual_memory, cpu_times
 from sys import argv, exit
 from time import monotonic
+from PyQt5.QtCore import QTimer, QLineF
+from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
+from PyQt5.QtGui import QIcon, QPainter, QPixmap, QColorConstants
 
 
 def sample_mem():
@@ -18,10 +18,31 @@ def sample_cpu():
     return (cpu.system, cpu.user, cpu.idle)
 
 
+class StackedGraph():
+
+    def __init__(self, colors):
+        self.colors = colors
+
+    def __call__(self, painter, width, height, samples):
+        for i, sample in enumerate(samples):
+            if sample is None:
+                continue
+            total = sum(sample)
+            offset = 0
+            for val, color in zip(sample, self.colors):
+                painter.setPen(color)
+                val_height = val / total * height
+                painter.drawLine(
+                    QLineF(i, height - offset, i,
+                           height - offset - val_height))
+                offset += val_height
+
+
 class SlidingWindow():
+
     def __init__(self, size, default_val):
         self.start = 0
-        self.window = [default_val]*size
+        self.window = [default_val] * size
 
     def push(self, x):
         self.window[self.start] = x
@@ -30,55 +51,6 @@ class SlidingWindow():
     def __iter__(self):
         for i in range(len(self.window)):
             yield self.window[(self.start + i) % len(self.window)]
-
-
-class TrayIcon():
-
-    def __init__(self, parent, width, height, interval, colors, sample):
-        self.width = width
-        self.height = height
-        self.colors = colors
-        self.sample = sample
-
-        self.tray = QSystemTrayIcon(parent)
-        self.pixmap = QPixmap(self.width, self.height)
-        self.window = SlidingWindow(width, None)
-        self.draw()
-
-        right_menu = QMenu()
-        action = QAction("Exit", right_menu)
-        action.triggered.connect(lambda: QApplication.exit(0))
-        right_menu.addAction(action)
-        self.tray.setContextMenu(right_menu)
-
-        self.tray.show()
-
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.timeout)
-        self.timer.start(interval)
-
-    def timeout(self):
-        sample = self.sample()
-        self.window.push(sample)
-        self.draw()
-
-    def draw(self):
-        self.pixmap.fill(QColorConstants.Transparent)
-        with QPainter(self.pixmap) as painter:
-            painter.setRenderHints(QPainter.Antialiasing)
-            for i, sample in enumerate(self.window):
-                if sample is None:
-                    continue
-                total = sum(sample)
-                offset = 0
-                for val, color in zip(sample, self.colors):
-                    painter.setPen(color)
-                    height = val / total * self.height
-                    painter.drawLine(
-                        QLineF(i, self.height - offset, i,
-                               self.height - offset - height))
-                    offset = height
-        self.tray.setIcon(QIcon(self.pixmap))
 
 
 class DeltaSampler():
@@ -97,14 +69,52 @@ class DeltaSampler():
         return delta
 
 
+class TrayIcon():
+
+    def __init__(self, parent, width, height, interval, take_sample, painter):
+        self.width = width
+        self.height = height
+        self.take_sample = take_sample
+        self.painter = painter
+
+        self.tray = QSystemTrayIcon(parent)
+        self.pixmap = QPixmap(self.width, self.height)
+        self.samples = SlidingWindow(width, None)
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.timeout)
+        self.timer.start(interval)
+
+        right_menu = QMenu()
+        action = QAction("Exit", right_menu)
+        action.triggered.connect(lambda: QApplication.exit(0))
+        right_menu.addAction(action)
+        self.tray.setContextMenu(right_menu)
+
+        self.draw()
+        self.tray.show()
+
+    def timeout(self):
+        self.samples.push(self.take_sample())
+        self.draw()
+
+    def draw(self):
+        self.pixmap.fill(QColorConstants.Transparent)
+        with QPainter(self.pixmap) as painter:
+            painter.setRenderHints(QPainter.Antialiasing)
+            self.painter(painter, self.width, self.height, self.samples)
+        self.tray.setIcon(QIcon(self.pixmap))
+
+
 if __name__ == "__main__":
     app = QApplication(argv)
 
-    cpu = TrayIcon(app, 32, 32, 100,
-                   (QColorConstants.Blue, QColorConstants.Cyan,
-                    QColorConstants.Transparent), DeltaSampler(sample_cpu))
-    mem = TrayIcon(app, 32, 32, 100,
-                   (QColorConstants.Green, QColorConstants.Transparent),
-                   sample_mem)
+    cpu = TrayIcon(
+        app, 32, 32, 100, DeltaSampler(sample_cpu),
+        StackedGraph((QColorConstants.Blue, QColorConstants.Cyan,
+                      QColorConstants.Transparent)))
+    mem = TrayIcon(
+        app, 32, 32, 100, sample_mem,
+        StackedGraph((QColorConstants.Green, QColorConstants.Transparent)))
 
     exit(app.exec_())
