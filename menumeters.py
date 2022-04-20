@@ -18,23 +18,26 @@ def sample_cpu():
     return (cpu.system, cpu.user, cpu.idle)
 
 
-class TrayIcon(QSystemTrayIcon):
+class TrayIcon():
 
     def __init__(self, parent, width, height, interval, colors, sample):
-        QSystemTrayIcon.__init__(self, parent)
-
         self.width = width
         self.height = height
         self.colors = colors
         self.sample = sample
 
+        self.tray = QSystemTrayIcon(parent)
+        self.pixmap = QPixmap(self.width, self.height)
         self.window = [None] * width
         self.draw()
 
-        right_menu = RightClicked()
-        self.setContextMenu(right_menu)
+        right_menu = QMenu()
+        action = QAction("Exit", right_menu)
+        action.triggered.connect(lambda: QApplication.exit(0))
+        right_menu.addAction(action)
+        self.tray.setContextMenu(right_menu)
 
-        self.show()
+        self.tray.show()
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.timeout)
@@ -47,9 +50,8 @@ class TrayIcon(QSystemTrayIcon):
         self.draw()
 
     def draw(self):
-        pixmap = QPixmap(self.width, self.height)
-        pixmap.fill(QColorConstants.Transparent)
-        with QPainter(pixmap) as painter:
+        self.pixmap.fill(QColorConstants.Transparent)
+        with QPainter(self.pixmap) as painter:
             painter.setRenderHints(QPainter.Antialiasing)
             for i, sample in enumerate(self.window):
                 if sample is None:
@@ -63,18 +65,7 @@ class TrayIcon(QSystemTrayIcon):
                         QLineF(i, self.height - offset, i,
                                self.height - offset - height))
                     offset = height
-        icon = QIcon(pixmap)
-        self.setIcon(icon)
-
-
-class RightClicked(QMenu):
-
-    def __init__(self, parent=None):
-        QMenu.__init__(self, parent=None)
-
-        action = QAction("Exit", self)
-        action.triggered.connect(lambda: QApplication.exit(0))
-        self.addAction(action)
+        self.tray.setIcon(QIcon(self.pixmap))
 
 
 class DeltaSampler():
