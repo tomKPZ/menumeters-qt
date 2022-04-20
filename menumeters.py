@@ -28,6 +28,7 @@ class TrayIcon():
 
         self.tray = QSystemTrayIcon(parent)
         self.pixmap = QPixmap(self.width, self.height)
+        self.window_start = 0
         self.window = [None] * width
         self.draw()
 
@@ -45,15 +46,16 @@ class TrayIcon():
 
     def timeout(self):
         sample = self.sample()
-        # TODO: use circular buffer
-        self.window = self.window[1:] + [sample]
+        self.window[self.window_start] = sample
+        self.window_start = (self.window_start + 1) % self.width
         self.draw()
 
     def draw(self):
         self.pixmap.fill(QColorConstants.Transparent)
         with QPainter(self.pixmap) as painter:
             painter.setRenderHints(QPainter.Antialiasing)
-            for i, sample in enumerate(self.window):
+            for i in range(self.width):
+                sample = self.window[(self.window_start + i) % self.width]
                 if sample is None:
                     continue
                 total = sum(sample)
