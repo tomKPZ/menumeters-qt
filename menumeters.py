@@ -18,6 +18,20 @@ def sample_cpu():
     return (cpu.system, cpu.user, cpu.idle)
 
 
+class SlidingWindow():
+    def __init__(self, size, default_val):
+        self.start = 0
+        self.window = [default_val]*size
+
+    def push(self, x):
+        self.window[self.start] = x
+        self.start = (self.start + 1) % len(self.window)
+
+    def __iter__(self):
+        for i in range(len(self.window)):
+            yield self.window[(self.start + i) % len(self.window)]
+
+
 class TrayIcon():
 
     def __init__(self, parent, width, height, interval, colors, sample):
@@ -28,8 +42,7 @@ class TrayIcon():
 
         self.tray = QSystemTrayIcon(parent)
         self.pixmap = QPixmap(self.width, self.height)
-        self.window_start = 0
-        self.window = [None] * width
+        self.window = SlidingWindow(width, None)
         self.draw()
 
         right_menu = QMenu()
@@ -46,16 +59,14 @@ class TrayIcon():
 
     def timeout(self):
         sample = self.sample()
-        self.window[self.window_start] = sample
-        self.window_start = (self.window_start + 1) % self.width
+        self.window.push(sample)
         self.draw()
 
     def draw(self):
         self.pixmap.fill(QColorConstants.Transparent)
         with QPainter(self.pixmap) as painter:
             painter.setRenderHints(QPainter.Antialiasing)
-            for i in range(self.width):
-                sample = self.window[(self.window_start + i) % self.width]
+            for i, sample in enumerate(self.window):
                 if sample is None:
                     continue
                 total = sum(sample)
