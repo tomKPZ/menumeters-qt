@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from psutil import virtual_memory, cpu_times
+from psutil import virtual_memory, cpu_times, disk_io_counters
 from sys import argv, exit
 from time import monotonic
 from PyQt5.QtCore import QTimer, QLineF
@@ -16,6 +16,12 @@ def sample_mem():
 def sample_cpu():
     cpu = cpu_times()
     return (cpu.system, cpu.user, cpu.idle)
+
+
+def sample_disk():
+    disk = disk_io_counters()
+    # return (disk.read_bytes, disk.write_bytes)
+    return disk.read_bytes,
 
 
 class StackedGraph():
@@ -38,11 +44,31 @@ class StackedGraph():
                 offset += val_height
 
 
+class ScaledGraph():
+
+    def __init__(self, color):
+        self.color = color
+
+    def __call__(self, painter, width, height, samples):
+        try:
+            total = max(sample[0] for sample in samples if sample is not None)
+        except ValueError:
+            return
+        if total == 0:
+            return
+        for i, sample in enumerate(samples):
+            if sample is None:
+                continue
+            painter.setPen(self.color)
+            val_height = sample[0] / total * height
+            painter.drawLine(QLineF(i, height, i, height - val_height))
+
+
 class SlidingWindow():
 
-    def __init__(self, size, default_val):
+    def __init__(self, size):
         self.start = 0
-        self.window = [default_val] * size
+        self.window = [None] * size
 
     def push(self, x):
         self.window[self.start] = x
@@ -63,7 +89,7 @@ class DeltaSampler():
     def __call__(self):
         sample = self.sampler()
         ts = monotonic()
-        delta = [(s2 - s1) / (self.prev_ts - ts)
+        delta = [(s2 - s1) / (ts - self.prev_ts)
                  for (s1, s2) in zip(self.prev, sample)]
         self.prev, self.prev_ts = sample, ts
         return delta
@@ -79,7 +105,7 @@ class TrayIcon():
 
         self.tray = QSystemTrayIcon(parent)
         self.pixmap = QPixmap(self.width, self.height)
-        self.samples = SlidingWindow(width, None)
+        self.samples = SlidingWindow(width)
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.timeout)
@@ -116,5 +142,7 @@ if __name__ == "__main__":
     mem = TrayIcon(
         app, 32, 32, 100, sample_mem,
         StackedGraph((QColorConstants.Green, QColorConstants.Transparent)))
+    disk = TrayIcon(app, 32, 32, 100, DeltaSampler(
+        sample_disk), ScaledGraph(QColorConstants.Red))
 
     exit(app.exec_())
