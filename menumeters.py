@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from psutil import virtual_memory, cpu_times, disk_io_counters
+from psutil import virtual_memory, cpu_times, disk_io_counters, net_io_counters
 from sys import argv, exit
 from time import monotonic
 from PyQt5.QtCore import QTimer, QLineF
@@ -20,7 +20,12 @@ def sample_cpu():
 
 def sample_disk():
     disk = disk_io_counters()
-    return (disk.read_bytes, disk.write_bytes)
+    return (disk.write_bytes, disk.read_bytes)
+
+
+def sample_net():
+    net = net_io_counters()
+    return (net.bytes_sent, net.bytes_recv)
 
 
 class StackedGraph():
@@ -157,6 +162,10 @@ if __name__ == "__main__":
         StackedGraph((QColorConstants.Green, QColorConstants.Transparent)))
     disk = TrayIcon(
         app, 32, 32, 100, DeltaSampler(sample_disk),
+        SplitGraph(ScaledGraph(QColorConstants.Red),
+                   ScaledGraph(QColorConstants.Green)))
+    net = TrayIcon(
+        app, 32, 32, 100, DeltaSampler(sample_net),
         SplitGraph(ScaledGraph(QColorConstants.Red),
                    ScaledGraph(QColorConstants.Green)))
 
