@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
+from itertools import chain
 from psutil import virtual_memory, cpu_times, disk_io_counters, net_io_counters
 from sys import argv, exit
 from time import monotonic
-from PyQt5.QtCore import QTimer, QLineF
+from PyQt5.QtCore import QTimer, QLineF, Qt
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
-from PyQt5.QtGui import QIcon, QPainter, QPixmap, QColorConstants, QTransform
+from PyQt5.QtGui import QIcon, QPainter, QPixmap, QColorConstants, QTransform, QFont
 
 
 def sample_mem():
@@ -26,6 +27,15 @@ def sample_disk():
 def sample_net():
     net = net_io_counters()
     return (net.bytes_sent, net.bytes_recv)
+
+
+def format_bytes(bytes):
+    SI_PREFIXES = 'KMGTPEZY'
+    for prefix in chain([''], SI_PREFIXES):
+        if bytes < 1000:
+            break
+        bytes /= 1000
+    return f'{bytes:.3g}{prefix}B'
 
 
 class StackedGraph():
@@ -68,13 +78,17 @@ class ScaledGraph():
         self.color = color
 
     def __call__(self, painter, width, height, samples):
-        if not samples or not (total := max(samples)):
-            return
-        for i, sample in enumerate(samples):
-            painter.setPen(self.color)
-            val_height = sample / total * height
-            col = width - i - 1
-            painter.drawLine(QLineF(col, height, col, height - val_height))
+        if samples and (total := max(samples)):
+            for i, sample in enumerate(samples):
+                painter.setPen(self.color)
+                val_height = sample / total * height
+                col = width - i - 1
+                painter.drawLine(QLineF(col, height, col, height - val_height))
+        if samples:
+            painter.setPen(QColorConstants.White)
+            painter.setFont(QFont('monospace', 8))
+            painter.drawText(0, 0, width, height, Qt.AlignCenter,
+                             format_bytes(samples[0]) + '/s')
 
 
 class SlidingWindow():
