@@ -5,7 +5,7 @@ from sys import argv, exit
 from time import monotonic
 from PyQt5.QtCore import QTimer, QLineF
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
-from PyQt5.QtGui import QIcon, QPainter, QPixmap, QColorConstants
+from PyQt5.QtGui import QIcon, QPainter, QPixmap, QColorConstants, QTransform
 
 
 def sample_mem():
@@ -20,8 +20,7 @@ def sample_cpu():
 
 def sample_disk():
     disk = disk_io_counters()
-    # return (disk.read_bytes, disk.write_bytes)
-    return disk.read_bytes,
+    return (disk.read_bytes, disk.write_bytes)
 
 
 class StackedGraph():
@@ -31,17 +30,31 @@ class StackedGraph():
 
     def __call__(self, painter, width, height, samples):
         for i, sample in enumerate(samples):
-            if sample is None:
-                continue
             total = sum(sample)
             offset = 0
+            col = width - i - 1
             for val, color in zip(sample, self.colors):
                 painter.setPen(color)
                 val_height = val / total * height
                 painter.drawLine(
-                    QLineF(i, height - offset, i,
+                    QLineF(col, height - offset, col,
                            height - offset - val_height))
                 offset += val_height
+
+
+class SplitGraph():
+
+    def __init__(self, top, bottom):
+        self.top = top
+        self.bottom = bottom
+
+    def __call__(self, painter, width, height, samples):
+        self.top(painter, width, height // 2,
+                 list(sample[0] for sample in samples))
+        painter.setTransform(QTransform().translate(0, height // 2),
+                             combine=True)
+        self.bottom(painter, width, height // 2,
+                    list(sample[1] for sample in samples))
 
 
 class ScaledGraph():
@@ -50,33 +63,33 @@ class ScaledGraph():
         self.color = color
 
     def __call__(self, painter, width, height, samples):
-        try:
-            total = max(sample[0] for sample in samples if sample is not None)
-        except ValueError:
-            return
-        if total == 0:
+        if not samples or not (total := max(samples)):
             return
         for i, sample in enumerate(samples):
-            if sample is None:
-                continue
             painter.setPen(self.color)
-            val_height = sample[0] / total * height
-            painter.drawLine(QLineF(i, height, i, height - val_height))
+            val_height = sample / total * height
+            col = width - i - 1
+            painter.drawLine(QLineF(col, height, col, height - val_height))
 
 
 class SlidingWindow():
 
     def __init__(self, size):
-        self.start = 0
+        self.len = 0
+        self.end = 0
         self.window = [None] * size
 
     def push(self, x):
-        self.window[self.start] = x
-        self.start = (self.start + 1) % len(self.window)
+        self.window[self.end] = x
+        self.end = (self.end + 1) % len(self.window)
+        self.len = min(len(self.window), self.len + 1)
+
+    def __len__(self):
+        return self.len
 
     def __iter__(self):
-        for i in range(len(self.window)):
-            yield self.window[(self.start + i) % len(self.window)]
+        for i in range(self.len):
+            yield self.window[(self.end - i - 1) % len(self.window)]
 
 
 class DeltaSampler():
@@ -142,7 +155,9 @@ if __name__ == "__main__":
     mem = TrayIcon(
         app, 32, 32, 100, sample_mem,
         StackedGraph((QColorConstants.Green, QColorConstants.Transparent)))
-    disk = TrayIcon(app, 32, 32, 100, DeltaSampler(
-        sample_disk), ScaledGraph(QColorConstants.Red))
+    disk = TrayIcon(
+        app, 32, 32, 100, DeltaSampler(sample_disk),
+        SplitGraph(ScaledGraph(QColorConstants.Red),
+                   ScaledGraph(QColorConstants.Green)))
 
     exit(app.exec_())
