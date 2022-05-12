@@ -5,8 +5,7 @@ import psutil
 import sys
 import time
 from PyQt5.QtCore import QTimer, QLineF, Qt
-from PyQt5.QtGui import (QIcon, QPainter, QPixmap, QColorConstants, QTransform,
-                         QFont)
+from PyQt5.QtGui import QIcon, QPainter, QPixmap, QTransform, QFont, QColor
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
 
 
@@ -31,7 +30,7 @@ class StackedGraph():
             col = width - i - 1
             for color, attr in self.colors:
                 val = getattr(sample, attr)
-                painter.setPen(color)
+                painter.setPen(QColor.fromRgba(color))
                 val_height = val / total * height
                 painter.drawLine(
                     QLineF(col, height - offset, col,
@@ -52,7 +51,7 @@ class Graph():
             return
 
         for i, sample in enumerate(self.samples):
-            painter.setPen(self.color)
+            painter.setPen(QColor.fromRgba(self.color))
             val_height = getattr(sample, self.attr) / total * height
             col = width - i - 1
             painter.drawLine(QLineF(col, height, col, height - val_height))
@@ -68,7 +67,7 @@ class Text():
         if not self.samples:
             return
 
-        painter.setPen(QColorConstants.White)
+        painter.setPen(QColor.fromRgba(0xffffffff))
         painter.setFont(QFont('monospace', 8))
         painter.drawText(
             0, 0, width, height, Qt.AlignCenter,
@@ -178,7 +177,7 @@ class TrayIcon():
         self.tray.show()
 
     def draw(self):
-        self.pixmap.fill(QColorConstants.Transparent)
+        self.pixmap.fill(QColor.fromRgba(0))
         with QPainter(self.pixmap) as painter:
             painter.setRenderHints(QPainter.Antialiasing)
             self.painter(painter, self.width, self.height)
@@ -203,30 +202,30 @@ if __name__ == "__main__":
         TrayIcon(
             app, 32, 32,
             StackedGraph(cpu, [
-                (QColorConstants.Blue, 'system'),
-                (QColorConstants.Cyan, 'user'),
-                (QColorConstants.Transparent, 'idle'),
+                (0xff0000ff, 'system'),
+                (0xff00ffff, 'user'),
+                (0x00000000, 'idle'),
             ])),
         TrayIcon(
             app, 32, 32,
             StackedGraph(mem, [
-                (QColorConstants.Green, 'used'),
-                (QColorConstants.Transparent, 'free'),
+                (0xff00ff00, 'used'),
+                (0x00000000, 'free'),
             ])),
         TrayIcon(
             app, 32, 32,
             VSplit(
                 Overlay(Text(disk, 'write_bytes'),
-                        Graph(disk, QColorConstants.Red, 'write_bytes')),
+                        Graph(disk, 0xffff0000, 'write_bytes')),
                 Overlay(Text(disk, 'read_bytes'),
-                        Graph(disk, QColorConstants.Green, 'read_bytes')))),
+                        Graph(disk, 0xff00ff00, 'read_bytes')))),
         TrayIcon(
             app, 32, 32,
             VSplit(
                 Overlay(Text(net, 'bytes_sent'),
-                        Graph(net, QColorConstants.Red, 'bytes_sent')),
+                        Graph(net, 0xffff0000, 'bytes_sent')),
                 Overlay(Text(net, 'bytes_recv'),
-                        Graph(net, QColorConstants.Green, 'bytes_recv')))),
+                        Graph(net, 0xff00ff00, 'bytes_recv')))),
     ]
 
     sys.exit(app.exec_())
