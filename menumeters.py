@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 
-import psutil
 import sys
 import time
-from PyQt5.QtCore import QTimer, QLineF, Qt
-from PyQt5.QtGui import QIcon, QPainter, QPixmap, QTransform, QFont, QColor
-from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
+
+import psutil
+from PyQt5.QtCore import QLineF, Qt, QTimer
+from PyQt5.QtGui import QColor, QFont, QIcon, QPainter, QPixmap, QTransform
+from PyQt5.QtWidgets import QAction, QApplication, QMenu, QSystemTrayIcon
 
 
 def format_bytes(bytes):
-    for prefix in ('', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'):
+    for prefix in ("", "K", "M", "G", "T", "P", "E", "Z", "Y"):
         if bytes < 1000:
             break
         bytes /= 1000
-    return f'{bytes:.3g}', f'{prefix}B'
+    return f"{bytes:.3g}", f"{prefix}B"
 
 
-class Graph():
-
+class Graph:
     def __init__(self, samples, colors):
         self.samples = samples
         self.colors = colors
@@ -37,13 +37,14 @@ class Graph():
                 painter.setPen(QColor.fromRgba(color))
                 val_height = val * scale * height
                 painter.drawLine(
-                    QLineF(col, height - offset, col,
-                           height - offset - val_height))
+                    QLineF(
+                        col, height - offset, col, height - offset - val_height
+                    )
+                )
                 offset += val_height
 
 
-class Text():
-
+class Text:
     def __init__(self, samples, formatter, font, size, color, flags):
         self.samples = samples
         self.formatter = formatter
@@ -58,12 +59,17 @@ class Text():
 
         painter.setPen(QColor.fromRgba(self.color))
         painter.setFont(QFont(self.font, self.size))
-        painter.drawText(0, 0, width, height, self.flags,
-                         self.formatter(next(iter(self.samples))))
+        painter.drawText(
+            0,
+            0,
+            width,
+            height,
+            self.flags,
+            self.formatter(next(iter(self.samples))),
+        )
 
 
-class VSplit():
-
+class VSplit:
     def __init__(self, top, bottom):
         self.top = top
         self.bottom = bottom
@@ -71,14 +77,14 @@ class VSplit():
     def __call__(self, painter, width, height):
         self.top(painter, width, height // 2)
         painter.save()
-        painter.setTransform(QTransform().translate(0, height // 2),
-                             combine=True)
+        painter.setTransform(
+            QTransform().translate(0, height // 2), combine=True
+        )
         self.bottom(painter, width, height // 2)
         painter.restore()
 
 
-class Overlay():
-
+class Overlay:
     def __init__(self, top, bottom):
         self.top = top
         self.bottom = bottom
@@ -88,8 +94,7 @@ class Overlay():
         self.top(painter, width, height)
 
 
-class SlidingWindow():
-
+class SlidingWindow:
     def __init__(self, size):
         self.len = 0
         self.end = 0
@@ -108,8 +113,7 @@ class SlidingWindow():
             yield self.window[(self.end - i - 1) % len(self.window)]
 
 
-class Rate():
-
+class Rate:
     def __init__(self, sampler):
         self.sampler = sampler
         self.prev = self.sampler()
@@ -118,14 +122,15 @@ class Rate():
     def __call__(self):
         sample = self.sampler()
         ts = time.monotonic()
-        rate = [(s2 - s1) / (ts - self.prev_ts)
-                for (s1, s2) in zip(self.prev, sample)]
+        rate = [
+            (s2 - s1) / (ts - self.prev_ts)
+            for (s1, s2) in zip(self.prev, sample)
+        ]
         self.prev, self.prev_ts = sample, ts
         return rate
 
 
-class Delta():
-
+class Delta:
     def __init__(self, sampler):
         self.sampler = sampler
         self.prev = self.sampler()
@@ -137,8 +142,7 @@ class Delta():
         return rate
 
 
-class Normalize():
-
+class Normalize:
     def __init__(self, sampler):
         self.sampler = sampler
 
@@ -149,7 +153,6 @@ class Normalize():
 
 
 class Sampler(SlidingWindow):
-
     def __init__(self, interval, window, sample):
         super().__init__(window)
 
@@ -167,8 +170,7 @@ class Sampler(SlidingWindow):
             icon.draw()
 
 
-class Index():
-
+class Index:
     def __init__(self, sampler, index):
         self.sampler = sampler
         self.index = index
@@ -181,8 +183,7 @@ class Index():
             yield sample[self.index]
 
 
-class List():
-
+class List:
     def __init__(self, sampler):
         self.sampler = sampler
 
@@ -194,8 +195,7 @@ class List():
             yield [sample]
 
 
-class TrayIcon():
-
+class TrayIcon:
     def __init__(self, width, height, painter):
         self.width = width
         self.height = height
@@ -252,42 +252,56 @@ if __name__ == "__main__":
     net_recv = Index(net, 1)
 
     text_format = {
-        'font': 'monospace',
-        'size': 10,
-        'color': 0xffffffff,
+        "font": "monospace",
+        "size": 10,
+        "color": 0xFFFFFFFF,
     }
     rate = text_format | {
-        'formatter': lambda sample: format_bytes(sample)[0],
-        'flags': Qt.AlignRight | Qt.AlignVCenter,
+        "formatter": lambda sample: format_bytes(sample)[0],
+        "flags": Qt.AlignRight | Qt.AlignVCenter,
     }
     rate_units = text_format | {
-        'formatter': lambda sample: format_bytes(sample)[1] + '/s',
-        'flags': Qt.AlignLeft | Qt.AlignVCenter,
+        "formatter": lambda sample: format_bytes(sample)[1] + "/s",
+        "flags": Qt.AlignLeft | Qt.AlignVCenter,
     }
 
     tray_icons = [
-        TrayIcon(32, 32, Graph(cpu, [0xff0000ff, 0xff00ffff, 0x00000000])),
-        TrayIcon(32, 32, Graph(mem, [0xff00ff00, 0x00000000])),
+        TrayIcon(32, 32, Graph(cpu, [0xFF0000FF, 0xFF00FFFF, 0x00000000])),
+        TrayIcon(32, 32, Graph(mem, [0xFF00FF00, 0x00000000])),
         TrayIcon(
-            32, 32,
-            VSplit(Graph(List(disk_write), [0xffff0000]),
-                   Graph(List(disk_read), [0xff00ff00]))),
-        TrayIcon(32, 32,
-                 VSplit(Text(disk_write, **rate), Text(disk_read, **rate))),
+            32,
+            32,
+            VSplit(
+                Graph(List(disk_write), [0xFFFF0000]),
+                Graph(List(disk_read), [0xFF00FF00]),
+            ),
+        ),
         TrayIcon(
-            32, 32,
-            VSplit(Text(disk_write, **rate_units),
-                   Text(disk_read, **rate_units))),
+            32, 32, VSplit(Text(disk_write, **rate), Text(disk_read, **rate))
+        ),
         TrayIcon(
-            32, 32,
-            VSplit(Graph(List(net_sent), [0xffff0000]),
-                   Graph(List(net_recv), [0xff00ff00]))),
-        TrayIcon(32, 32, VSplit(Text(net_sent, **rate), Text(net_recv,
-                                                             **rate))),
+            32,
+            32,
+            VSplit(
+                Text(disk_write, **rate_units), Text(disk_read, **rate_units)
+            ),
+        ),
         TrayIcon(
-            32, 32,
-            VSplit(Text(net_sent, **rate_units), Text(net_recv,
-                                                      **rate_units))),
+            32,
+            32,
+            VSplit(
+                Graph(List(net_sent), [0xFFFF0000]),
+                Graph(List(net_recv), [0xFF00FF00]),
+            ),
+        ),
+        TrayIcon(
+            32, 32, VSplit(Text(net_sent, **rate), Text(net_recv, **rate))
+        ),
+        TrayIcon(
+            32,
+            32,
+            VSplit(Text(net_sent, **rate_units), Text(net_recv, **rate_units)),
+        ),
     ]
 
     sys.exit(app.exec_())
