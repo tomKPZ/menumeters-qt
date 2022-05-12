@@ -5,7 +5,8 @@ import time
 
 import psutil
 from PyQt5.QtCore import QLineF, Qt, QTimer
-from PyQt5.QtGui import QColor, QFont, QIcon, QPainter, QPixmap, QTransform
+from PyQt5.QtGui import (QColor, QColorConstants, QFont, QIcon, QPainter,
+                         QPixmap, QTransform)
 from PyQt5.QtWidgets import QAction, QApplication, QMenu, QSystemTrayIcon
 
 
@@ -215,7 +216,7 @@ class TrayIcon:
         self.tray.show()
 
     def draw(self):
-        self.pixmap.fill(QColor.fromRgba(0))
+        self.pixmap.fill(QColorConstants.Transparent)
         with QPainter(self.pixmap) as painter:
             painter.setRenderHints(QPainter.Antialiasing)
             self.painter(painter, self.width, self.height)
@@ -246,61 +247,53 @@ if __name__ == "__main__":
     disk = Sampler(100, 32, Rate(disk_sample))
     net = Sampler(100, 32, Rate(net_sample))
 
-    disk_write = Index(disk, 0)
-    disk_read = Index(disk, 1)
-    net_sent = Index(net, 0)
-    net_recv = Index(net, 1)
+    disk_w = Index(disk, 0)
+    disk_r = Index(disk, 1)
+    net_ul = Index(net, 0)
+    net_dl = Index(net, 1)
 
     text_format = {
         "font": "monospace",
         "size": 10,
         "color": 0xFFFFFFFF,
     }
-    rate = text_format | {
+    text_rate = text_format | {
         "formatter": lambda sample: format_bytes(sample)[0],
         "flags": Qt.AlignRight | Qt.AlignVCenter,
     }
-    rate_units = text_format | {
+    text_units = text_format | {
         "formatter": lambda sample: format_bytes(sample)[1] + "/s",
         "flags": Qt.AlignLeft | Qt.AlignVCenter,
     }
 
+    def icon(*args, **kwargs):
+        return TrayIcon(32, 32, *args, **kwargs)
+
+    def graph_one(sampler, color):
+        return Graph(List(sampler), [color])
+
     tray_icons = [
-        TrayIcon(32, 32, Graph(cpu, [0xFF0000FF, 0xFF00FFFF, 0x00000000])),
-        TrayIcon(32, 32, Graph(mem, [0xFF00FF00, 0x00000000])),
-        TrayIcon(
-            32,
-            32,
+        icon(Graph(cpu, [0xFF0000FF, 0xFF00FFFF, 0x00000000])),
+        icon(Graph(mem, [0xFF00FF00, 0x00000000])),
+        icon(
             VSplit(
-                Graph(List(disk_write), [0xFFFF0000]),
-                Graph(List(disk_read), [0xFF00FF00]),
+                graph_one(disk_w, 0xFFFF0000),
+                graph_one(disk_r, 0xFF00FF00),
             ),
         ),
-        TrayIcon(
-            32, 32, VSplit(Text(disk_write, **rate), Text(disk_read, **rate))
+        icon(VSplit(Text(disk_w, **text_rate), Text(disk_r, **text_rate))),
+        icon(
+            VSplit(Text(disk_w, **text_units), Text(disk_r, **text_units)),
         ),
-        TrayIcon(
-            32,
-            32,
+        icon(
             VSplit(
-                Text(disk_write, **rate_units), Text(disk_read, **rate_units)
+                graph_one(net_ul, 0xFFFF0000),
+                graph_one(net_dl, 0xFF00FF00),
             ),
         ),
-        TrayIcon(
-            32,
-            32,
-            VSplit(
-                Graph(List(net_sent), [0xFFFF0000]),
-                Graph(List(net_recv), [0xFF00FF00]),
-            ),
-        ),
-        TrayIcon(
-            32, 32, VSplit(Text(net_sent, **rate), Text(net_recv, **rate))
-        ),
-        TrayIcon(
-            32,
-            32,
-            VSplit(Text(net_sent, **rate_units), Text(net_recv, **rate_units)),
+        icon(VSplit(Text(net_ul, **text_rate), Text(net_dl, **text_rate))),
+        icon(
+            VSplit(Text(net_ul, **text_units), Text(net_dl, **text_units)),
         ),
     ]
 
