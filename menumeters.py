@@ -14,7 +14,7 @@ def format_bytes(bytes):
         if bytes < 1000:
             break
         bytes /= 1000
-    return f'{bytes:.3g}{prefix}B'
+    return f'{bytes:.3g}', f'{prefix}B'
 
 
 class StackedGraph():
@@ -59,21 +59,21 @@ class Graph():
 
 class Text():
 
-    def __init__(self, samples, attr, flags):
+    def __init__(self, samples, attr, flags, formatter):
         self.samples = samples
         self.attr = attr
         self.flags = flags
+        self.formatter = formatter
 
     def __call__(self, painter, width, height):
         if not self.samples:
             return
 
         painter.setPen(QColor.fromRgba(0xffffffff))
-        painter.setFont(QFont('monospace', 8))
+        painter.setFont(QFont('monospace', 10))
         painter.drawText(
             0, 0, width, height, self.flags,
-            format_bytes(getattr(
-                (next(iter(self.samples))), self.attr)) + '/s')
+            self.formatter(getattr((next(iter(self.samples))), self.attr)))
 
 
 class VSplit():
@@ -199,6 +199,15 @@ if __name__ == "__main__":
     disk = Sampler(100, 32, RateSample(psutil.disk_io_counters))
     net = Sampler(100, 32, RateSample(psutil.net_io_counters))
 
+    def format_bytes_n(sample):
+        return format_bytes(sample)[0]
+
+    def format_bytes_units(sample):
+        return format_bytes(sample)[1] + '/s'
+
+    bytes_n = Qt.AlignRight | Qt.AlignVCenter, format_bytes_n
+    bytes_units = Qt.AlignLeft | Qt.AlignVCenter, format_bytes_units
+
     tray_icons = [
         TrayIcon(
             app, 32, 32,
@@ -215,18 +224,28 @@ if __name__ == "__main__":
             ])),
         TrayIcon(
             app, 32, 32,
-            VSplit(
-                Overlay(Text(disk, 'write_bytes', Qt.AlignCenter),
-                        Graph(disk, 0xffff0000, 'write_bytes')),
-                Overlay(Text(disk, 'read_bytes', Qt.AlignCenter),
-                        Graph(disk, 0xff00ff00, 'read_bytes')))),
+            VSplit(Graph(disk, 0xffff0000, 'write_bytes'),
+                   Graph(disk, 0xff00ff00, 'read_bytes'))),
         TrayIcon(
             app, 32, 32,
-            VSplit(
-                Overlay(Text(net, 'bytes_sent', Qt.AlignCenter),
-                        Graph(net, 0xffff0000, 'bytes_sent')),
-                Overlay(Text(net, 'bytes_recv', Qt.AlignCenter),
-                        Graph(net, 0xff00ff00, 'bytes_recv')))),
+            VSplit(Text(disk, 'write_bytes', *bytes_n),
+                   Text(disk, 'read_bytes', *bytes_n))),
+        TrayIcon(
+            app, 32, 32,
+            VSplit(Text(disk, 'write_bytes', *bytes_units),
+                   Text(disk, 'read_bytes', *bytes_units))),
+        TrayIcon(
+            app, 32, 32,
+            VSplit(Graph(net, 0xffff0000, 'bytes_sent'),
+                   Graph(net, 0xff00ff00, 'bytes_recv'))),
+        TrayIcon(
+            app, 32, 32,
+            VSplit(Text(net, 'bytes_sent', *bytes_n),
+                   Text(net, 'bytes_recv', *bytes_n))),
+        TrayIcon(
+            app, 32, 32,
+            VSplit(Text(net, 'bytes_sent', *bytes_units),
+                   Text(net, 'bytes_recv', *bytes_units))),
     ]
 
     sys.exit(app.exec_())
