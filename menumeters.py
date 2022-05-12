@@ -131,6 +131,30 @@ class RateSample():
         return rate
 
 
+class DeltaSample():
+
+    def __init__(self, sampler):
+        self.sampler = sampler
+        self.prev = self.sampler()
+
+    def __call__(self):
+        sample = self.sampler()
+        rate = [(s2 - s1) for (s1, s2) in zip(self.prev, sample)]
+        self.prev = sample
+        return rate
+
+
+class Normalize():
+
+    def __init__(self, sampler):
+        self.sampler = sampler
+
+    def __call__(self):
+        sample = self.sampler()
+        total = sum(sample)
+        return [x / total for x in sample]
+
+
 class Sampler(SlidingWindow):
 
     def __init__(self, interval, window, sample):
@@ -211,7 +235,7 @@ if __name__ == "__main__":
         net = psutil.net_io_counters()
         return net.bytes_sent, net.bytes_recv
 
-    cpu = Sampler(100, 32, RateSample(cpu_sample))
+    cpu = Sampler(100, 32, Normalize(DeltaSample(cpu_sample)))
     mem = Sampler(100, 32, mem_sample)
     disk = Sampler(100, 32, RateSample(disk_sample))
     net = Sampler(100, 32, RateSample(net_sample))
