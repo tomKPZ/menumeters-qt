@@ -25,31 +25,21 @@ class Graph():
     def __call__(self, painter, width, height):
         if not self.samples:
             return
-        total = max(sum(sample) for sample in self._samples())
+        total = max(sum(sample) for sample in self.samples)
         if total == 0:
             return
         scale = 1 / total
-        for i, sample in enumerate(self._samples()):
+        for i, sample in enumerate(self.samples):
             total = sum(sample)
             offset = 0
             col = width - i - 1
-            for color, val in zip(self._colors(), sample):
+            for color, val in zip(self.colors, sample):
                 painter.setPen(QColor.fromRgba(color))
                 val_height = val * scale * height
                 painter.drawLine(
                     QLineF(col, height - offset, col,
                            height - offset - val_height))
                 offset += val_height
-
-    def _colors(self):
-        if type(self.colors) is list:
-            return self.colors
-        return [self.colors]
-
-    def _samples(self):
-        if type(self.colors) is list:
-            return self.samples
-        return [[x] for x in self.samples]
 
 
 class Text():
@@ -188,6 +178,19 @@ class Index():
             yield sample[self.index]
 
 
+class List():
+
+    def __init__(self, sampler):
+        self.sampler = sampler
+
+    def __len__(self):
+        return len(self.sampler)
+
+    def __iter__(self):
+        for sample in self.sampler:
+            yield [sample]
+
+
 class TrayIcon():
 
     def __init__(self, width, height, painter):
@@ -259,8 +262,8 @@ if __name__ == "__main__":
         TrayIcon(32, 32, Graph(mem, [0xff00ff00, 0x00000000])),
         TrayIcon(
             32, 32,
-            VSplit(Graph(disk_write, 0xffff0000), Graph(disk_read,
-                                                        0xff00ff00))),
+            VSplit(Graph(List(disk_write), [0xffff0000]),
+                   Graph(List(disk_read), [0xff00ff00]))),
         TrayIcon(32, 32,
                  VSplit(Text(disk_write, *bytes_n), Text(disk_read,
                                                          *bytes_n))),
@@ -270,7 +273,8 @@ if __name__ == "__main__":
                    Text(disk_read, *bytes_units))),
         TrayIcon(
             32, 32,
-            VSplit(Graph(net_sent, 0xffff0000), Graph(net_recv, 0xff00ff00))),
+            VSplit(Graph(List(net_sent), [0xffff0000]),
+                   Graph(List(net_recv), [0xff00ff00]))),
         TrayIcon(32, 32,
                  VSplit(Text(net_sent, *bytes_n), Text(net_recv, *bytes_n))),
         TrayIcon(
