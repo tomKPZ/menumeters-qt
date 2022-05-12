@@ -115,7 +115,7 @@ class SlidingWindow():
             yield self.window[(self.end - i - 1) % len(self.window)]
 
 
-class RateSample():
+class Rate():
 
     def __init__(self, sampler):
         self.sampler = sampler
@@ -131,7 +131,7 @@ class RateSample():
         return rate
 
 
-class DeltaSample():
+class Delta():
 
     def __init__(self, sampler):
         self.sampler = sampler
@@ -235,10 +235,10 @@ if __name__ == "__main__":
         net = psutil.net_io_counters()
         return net.bytes_sent, net.bytes_recv
 
-    cpu = Sampler(100, 32, Normalize(DeltaSample(cpu_sample)))
+    cpu = Sampler(100, 32, Normalize(Delta(cpu_sample)))
     mem = Sampler(100, 32, mem_sample)
-    disk = Sampler(100, 32, RateSample(disk_sample))
-    net = Sampler(100, 32, RateSample(net_sample))
+    disk = Sampler(100, 32, Rate(disk_sample))
+    net = Sampler(100, 32, Rate(net_sample))
 
     disk_write = Index(disk, 0)
     disk_read = Index(disk, 1)
