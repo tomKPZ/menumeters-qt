@@ -17,13 +17,21 @@ def format_bytes(bytes):
     return f'{bytes:.3g}', f'{prefix}B'
 
 
-class StackedGraph():
+class Graph():
 
     def __init__(self, samples, colors):
         self.samples = samples
         self.colors = colors
 
     def __call__(self, painter, width, height):
+        if not self.samples:
+            return
+        total = max(
+            sum(getattr(sample, attr) for (_, attr) in self.colors)
+            for sample in self.samples)
+        if total == 0:
+            return
+        scale = 1 / total
         for i, sample in enumerate(self.samples):
             total = sum(sample)
             offset = 0
@@ -31,30 +39,11 @@ class StackedGraph():
             for color, attr in self.colors:
                 val = getattr(sample, attr)
                 painter.setPen(QColor.fromRgba(color))
-                val_height = val / total * height
+                val_height = val * scale * height
                 painter.drawLine(
                     QLineF(col, height - offset, col,
                            height - offset - val_height))
                 offset += val_height
-
-
-class Graph():
-
-    def __init__(self, samples, color, attr):
-        self.samples = samples
-        self.color = color
-        self.attr = attr
-
-    def __call__(self, painter, width, height):
-        if not self.samples or not (total := max(
-                getattr(sample, self.attr) for sample in self.samples)):
-            return
-
-        for i, sample in enumerate(self.samples):
-            painter.setPen(QColor.fromRgba(self.color))
-            val_height = getattr(sample, self.attr) / total * height
-            col = width - i - 1
-            painter.drawLine(QLineF(col, height, col, height - val_height))
 
 
 class Text():
@@ -211,21 +200,20 @@ if __name__ == "__main__":
     tray_icons = [
         TrayIcon(
             app, 32, 32,
-            StackedGraph(cpu, [
+            Graph(cpu, [
                 (0xff0000ff, 'system'),
                 (0xff00ffff, 'user'),
                 (0x00000000, 'idle'),
             ])),
+        TrayIcon(app, 32, 32,
+                 Graph(mem, [
+                     (0xff00ff00, 'used'),
+                     (0x00000000, 'free'),
+                 ])),
         TrayIcon(
             app, 32, 32,
-            StackedGraph(mem, [
-                (0xff00ff00, 'used'),
-                (0x00000000, 'free'),
-            ])),
-        TrayIcon(
-            app, 32, 32,
-            VSplit(Graph(disk, 0xffff0000, 'write_bytes'),
-                   Graph(disk, 0xff00ff00, 'read_bytes'))),
+            VSplit(Graph(disk, [(0xffff0000, 'write_bytes')]),
+                   Graph(disk, [(0xff00ff00, 'read_bytes')]))),
         TrayIcon(
             app, 32, 32,
             VSplit(Text(disk, 'write_bytes', *bytes_n),
@@ -236,8 +224,8 @@ if __name__ == "__main__":
                    Text(disk, 'read_bytes', *bytes_units))),
         TrayIcon(
             app, 32, 32,
-            VSplit(Graph(net, 0xffff0000, 'bytes_sent'),
-                   Graph(net, 0xff00ff00, 'bytes_recv'))),
+            VSplit(Graph(net, [(0xffff0000, 'bytes_sent')]),
+                   Graph(net, [(0xff00ff00, 'bytes_recv')]))),
         TrayIcon(
             app, 32, 32,
             VSplit(Text(net, 'bytes_sent', *bytes_n),
