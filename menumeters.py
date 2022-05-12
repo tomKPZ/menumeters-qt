@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import collections
 import psutil
 import sys
 import time
@@ -28,8 +29,8 @@ class StackedGraph():
             total = sum(sample)
             offset = 0
             col = width - i - 1
-            for color, getter in self.colors:
-                val = getter(sample)
+            for color, attr in self.colors:
+                val = getattr(sample, attr)
                 painter.setPen(color)
                 val_height = val / total * height
                 painter.drawLine(
@@ -40,28 +41,28 @@ class StackedGraph():
 
 class ScaledGraph():
 
-    def __init__(self, samples, color, getter):
+    def __init__(self, samples, color, attr):
         self.samples = samples
         self.color = color
-        self.getter = getter
+        self.attr = attr
 
     def __call__(self, painter, width, height):
         if not self.samples or not (total := max(
-                self.getter(sample) for sample in self.samples)):
+                getattr(sample, self.attr) for sample in self.samples)):
             return
 
         for i, sample in enumerate(self.samples):
             painter.setPen(self.color)
-            val_height = self.getter(sample) / total * height
+            val_height = getattr(sample, self.attr) / total * height
             col = width - i - 1
             painter.drawLine(QLineF(col, height, col, height - val_height))
 
 
 class TextGraph():
 
-    def __init__(self, samples, getter):
+    def __init__(self, samples, attr):
         self.samples = samples
-        self.getter = getter
+        self.attr = attr
 
     def __call__(self, painter, width, height):
         if not self.samples:
@@ -71,7 +72,8 @@ class TextGraph():
         painter.setFont(QFont('monospace', 8))
         painter.drawText(
             0, 0, width, height, Qt.AlignCenter,
-            format_bytes(self.getter(next(iter(self.samples)))) + '/s')
+            format_bytes(
+                getattr((next(iter(self.samples))), self.attr)) + '/s')
 
 
 class VerticalSplit():
@@ -186,8 +188,14 @@ class TrayIcon():
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
+    MemorySample = collections.namedtuple('MemorySample', ['used', 'free'])
+
+    def memory_sample():
+        mem = psutil.virtual_memory()
+        return MemorySample(mem.total - mem.available, mem.available)
+
     cpu = Sampler(100, 32, RateSample(psutil.cpu_times))
-    mem = Sampler(100, 32, psutil.virtual_memory)
+    mem = Sampler(100, 32, memory_sample)
     disk = Sampler(100, 32, RateSample(psutil.disk_io_counters))
     net = Sampler(100, 32, RateSample(psutil.net_io_counters))
 
@@ -195,39 +203,32 @@ if __name__ == "__main__":
         TrayIcon(
             app, 32, 32,
             StackedGraph(cpu, [
-                (QColorConstants.Blue, lambda sample: sample.system),
-                (QColorConstants.Cyan, lambda sample: sample.user),
-                (QColorConstants.Transparent, lambda sample: sample.idle),
+                (QColorConstants.Blue, 'system'),
+                (QColorConstants.Cyan, 'user'),
+                (QColorConstants.Transparent, 'idle'),
             ])),
         TrayIcon(
             app, 32, 32,
             StackedGraph(mem, [
-                (QColorConstants.Green,
-                 lambda sample: sample.total - sample.available),
-                (QColorConstants.Transparent, lambda sample: sample.available),
+                (QColorConstants.Green, 'used'),
+                (QColorConstants.Transparent, 'free'),
             ])),
         TrayIcon(
             app, 32, 32,
             VerticalSplit(
-                Overlay(
-                    TextGraph(disk, lambda sample: sample.write_bytes),
-                    ScaledGraph(disk, QColorConstants.Red,
-                                lambda sample: sample.write_bytes)),
-                Overlay(
-                    TextGraph(disk, lambda sample: sample.read_bytes),
-                    ScaledGraph(disk, QColorConstants.Green,
-                                lambda sample: sample.read_bytes)))),
+                Overlay(TextGraph(disk, 'write_bytes'),
+                        ScaledGraph(disk, QColorConstants.Red, 'write_bytes')),
+                Overlay(TextGraph(disk, 'read_bytes'),
+                        ScaledGraph(disk, QColorConstants.Green,
+                                    'read_bytes')))),
         TrayIcon(
             app, 32, 32,
             VerticalSplit(
-                Overlay(
-                    TextGraph(net, lambda sample: sample.bytes_sent),
-                    ScaledGraph(net, QColorConstants.Red,
-                                lambda sample: sample.bytes_sent)),
-                Overlay(
-                    TextGraph(net, lambda sample: sample.bytes_recv),
-                    ScaledGraph(net, QColorConstants.Green,
-                                lambda sample: sample.bytes_recv)))),
+                Overlay(TextGraph(net, 'bytes_sent'),
+                        ScaledGraph(net, QColorConstants.Red, 'bytes_sent')),
+                Overlay(TextGraph(net, 'bytes_recv'),
+                        ScaledGraph(net, QColorConstants.Green,
+                                    'bytes_recv')))),
     ]
 
     sys.exit(app.exec_())
