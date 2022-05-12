@@ -1,37 +1,16 @@
 #!/usr/bin/env python3
 
-from itertools import chain
-from psutil import virtual_memory, cpu_times, disk_io_counters, net_io_counters
-from sys import argv, exit
-from time import monotonic
+import psutil
+import sys
+import time
 from PyQt5.QtCore import QTimer, QLineF, Qt
+from PyQt5.QtGui import (QIcon, QPainter, QPixmap, QColorConstants, QTransform,
+                         QFont)
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction
-from PyQt5.QtGui import QIcon, QPainter, QPixmap, QColorConstants, QTransform, QFont
-
-
-def sample_mem():
-    mem = virtual_memory()
-    return (mem.total - mem.available, mem.available)
-
-
-def sample_cpu():
-    cpu = cpu_times()
-    return (cpu.system, cpu.user, cpu.idle)
-
-
-def sample_disk():
-    disk = disk_io_counters()
-    return (disk.write_bytes, disk.read_bytes)
-
-
-def sample_net():
-    net = net_io_counters()
-    return (net.bytes_sent, net.bytes_recv)
 
 
 def format_bytes(bytes):
-    SI_PREFIXES = 'KMGTPEZY'
-    for prefix in chain([''], SI_PREFIXES):
+    for prefix in ('', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'):
         if bytes < 1000:
             break
         bytes /= 1000
@@ -40,15 +19,17 @@ def format_bytes(bytes):
 
 class StackedGraph():
 
-    def __init__(self, colors):
+    def __init__(self, samples, colors):
+        self.samples = samples
         self.colors = colors
 
-    def __call__(self, painter, width, height, samples):
-        for i, sample in enumerate(samples):
+    def __call__(self, painter, width, height):
+        for i, sample in enumerate(self.samples):
             total = sum(sample)
             offset = 0
             col = width - i - 1
-            for val, color in zip(sample, self.colors):
+            for color, getter in self.colors:
+                val = getter(sample)
                 painter.setPen(color)
                 val_height = val / total * height
                 painter.drawLine(
@@ -63,32 +44,34 @@ class SplitGraph():
         self.top = top
         self.bottom = bottom
 
-    def __call__(self, painter, width, height, samples):
-        self.top(painter, width, height // 2,
-                 list(sample[0] for sample in samples))
+    def __call__(self, painter, width, height):
+        self.top(painter, width, height // 2)
         painter.setTransform(QTransform().translate(0, height // 2),
                              combine=True)
-        self.bottom(painter, width, height // 2,
-                    list(sample[1] for sample in samples))
+        self.bottom(painter, width, height // 2)
 
 
 class ScaledGraph():
 
-    def __init__(self, color):
+    def __init__(self, samples, color, getter):
+        self.samples = samples
         self.color = color
+        self.getter = getter
 
-    def __call__(self, painter, width, height, samples):
-        if samples and (total := max(samples)):
-            for i, sample in enumerate(samples):
+    def __call__(self, painter, width, height):
+        if self.samples and (total := max(
+                self.getter(sample) for sample in self.samples)):
+            for i, sample in enumerate(self.samples):
                 painter.setPen(self.color)
-                val_height = sample / total * height
+                val_height = self.getter(sample) / total * height
                 col = width - i - 1
                 painter.drawLine(QLineF(col, height, col, height - val_height))
-        if samples:
+        if self.samples:
             painter.setPen(QColorConstants.White)
             painter.setFont(QFont('monospace', 8))
-            painter.drawText(0, 0, width, height, Qt.AlignCenter,
-                             format_bytes(samples[0]) + '/s')
+            painter.drawText(
+                0, 0, width, height, Qt.AlignCenter,
+                format_bytes(self.getter(next(iter(self.samples)))) + '/s')
 
 
 class SlidingWindow():
@@ -111,37 +94,51 @@ class SlidingWindow():
             yield self.window[(self.end - i - 1) % len(self.window)]
 
 
-class DeltaSampler():
+class RateSample():
 
     def __init__(self, sampler):
         self.sampler = sampler
         self.prev = self.sampler()
-        self.prev_ts = monotonic()
+        self.prev_ts = time.monotonic()
 
     def __call__(self):
         sample = self.sampler()
-        ts = monotonic()
+        ts = time.monotonic()
         delta = [(s2 - s1) / (ts - self.prev_ts)
                  for (s1, s2) in zip(self.prev, sample)]
         self.prev, self.prev_ts = sample, ts
-        return delta
+        return type(sample)._make(delta)
+
+
+class Sampler(SlidingWindow):
+
+    def __init__(self, interval, window, sample):
+        super().__init__(window)
+
+        self.sample = sample
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.timeout)
+        self.timer.start(interval)
+
+    def timeout(self):
+        self.push(self.sample())
+
+        # TODO: Redraw only the icons that are necessary.
+        for icon in tray_icons:
+            icon.draw()
 
 
 class TrayIcon():
 
-    def __init__(self, parent, width, height, interval, take_sample, painter):
+    def __init__(self, parent, width, height, painter):
         self.width = width
         self.height = height
-        self.take_sample = take_sample
         self.painter = painter
 
         self.tray = QSystemTrayIcon(parent)
         self.pixmap = QPixmap(self.width, self.height)
         self.samples = SlidingWindow(width)
-
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.timeout)
-        self.timer.start(interval)
 
         right_menu = QMenu()
         action = QAction("Exit", right_menu)
@@ -152,35 +149,51 @@ class TrayIcon():
         self.draw()
         self.tray.show()
 
-    def timeout(self):
-        self.samples.push(self.take_sample())
-        self.draw()
-
     def draw(self):
         self.pixmap.fill(QColorConstants.Transparent)
         with QPainter(self.pixmap) as painter:
             painter.setRenderHints(QPainter.Antialiasing)
-            self.painter(painter, self.width, self.height, self.samples)
+            self.painter(painter, self.width, self.height)
         self.tray.setIcon(QIcon(self.pixmap))
 
 
 if __name__ == "__main__":
-    app = QApplication(argv)
+    app = QApplication(sys.argv)
 
-    cpu = TrayIcon(
-        app, 32, 32, 100, DeltaSampler(sample_cpu),
-        StackedGraph((QColorConstants.Blue, QColorConstants.Cyan,
-                      QColorConstants.Transparent)))
-    mem = TrayIcon(
-        app, 32, 32, 100, sample_mem,
-        StackedGraph((QColorConstants.Green, QColorConstants.Transparent)))
-    disk = TrayIcon(
-        app, 32, 32, 100, DeltaSampler(sample_disk),
-        SplitGraph(ScaledGraph(QColorConstants.Red),
-                   ScaledGraph(QColorConstants.Green)))
-    net = TrayIcon(
-        app, 32, 32, 100, DeltaSampler(sample_net),
-        SplitGraph(ScaledGraph(QColorConstants.Red),
-                   ScaledGraph(QColorConstants.Green)))
+    cpu = Sampler(100, 32, RateSample(psutil.cpu_times))
+    mem = Sampler(100, 32, psutil.virtual_memory)
+    disk = Sampler(100, 32, RateSample(psutil.disk_io_counters))
+    net = Sampler(100, 32, RateSample(psutil.net_io_counters))
 
-    exit(app.exec_())
+    tray_icons = [
+        TrayIcon(
+            app, 32, 32,
+            StackedGraph(cpu, [
+                (QColorConstants.Blue, lambda sample: sample.system),
+                (QColorConstants.Cyan, lambda sample: sample.user),
+                (QColorConstants.Transparent, lambda sample: sample.idle),
+            ])),
+        TrayIcon(
+            app, 32, 32,
+            StackedGraph(mem, [
+                (QColorConstants.Green,
+                 lambda sample: sample.total - sample.available),
+                (QColorConstants.Transparent, lambda sample: sample.available),
+            ])),
+        TrayIcon(
+            app, 32, 32,
+            SplitGraph(
+                ScaledGraph(disk, QColorConstants.Red,
+                            lambda sample: sample.write_bytes),
+                ScaledGraph(disk, QColorConstants.Green,
+                            lambda sample: sample.read_bytes))),
+        TrayIcon(
+            app, 32, 32,
+            SplitGraph(
+                ScaledGraph(net, QColorConstants.Red,
+                            lambda sample: sample.bytes_sent),
+                ScaledGraph(net, QColorConstants.Green,
+                            lambda sample: sample.bytes_recv))),
+    ]
+
+    sys.exit(app.exec_())
