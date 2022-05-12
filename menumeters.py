@@ -38,19 +38,6 @@ class StackedGraph():
                 offset += val_height
 
 
-class SplitGraph():
-
-    def __init__(self, top, bottom):
-        self.top = top
-        self.bottom = bottom
-
-    def __call__(self, painter, width, height):
-        self.top(painter, width, height // 2)
-        painter.setTransform(QTransform().translate(0, height // 2),
-                             combine=True)
-        self.bottom(painter, width, height // 2)
-
-
 class ScaledGraph():
 
     def __init__(self, samples, color, getter):
@@ -59,19 +46,58 @@ class ScaledGraph():
         self.getter = getter
 
     def __call__(self, painter, width, height):
-        if self.samples and (total := max(
+        if not self.samples or not (total := max(
                 self.getter(sample) for sample in self.samples)):
-            for i, sample in enumerate(self.samples):
-                painter.setPen(self.color)
-                val_height = self.getter(sample) / total * height
-                col = width - i - 1
-                painter.drawLine(QLineF(col, height, col, height - val_height))
-        if self.samples:
-            painter.setPen(QColorConstants.White)
-            painter.setFont(QFont('monospace', 8))
-            painter.drawText(
-                0, 0, width, height, Qt.AlignCenter,
-                format_bytes(self.getter(next(iter(self.samples)))) + '/s')
+            return
+
+        for i, sample in enumerate(self.samples):
+            painter.setPen(self.color)
+            val_height = self.getter(sample) / total * height
+            col = width - i - 1
+            painter.drawLine(QLineF(col, height, col, height - val_height))
+
+
+class TextGraph():
+
+    def __init__(self, samples, getter):
+        self.samples = samples
+        self.getter = getter
+
+    def __call__(self, painter, width, height):
+        if not self.samples:
+            return
+
+        painter.setPen(QColorConstants.White)
+        painter.setFont(QFont('monospace', 8))
+        painter.drawText(
+            0, 0, width, height, Qt.AlignCenter,
+            format_bytes(self.getter(next(iter(self.samples)))) + '/s')
+
+
+class VerticalSplit():
+
+    def __init__(self, top, bottom):
+        self.top = top
+        self.bottom = bottom
+
+    def __call__(self, painter, width, height):
+        self.top(painter, width, height // 2)
+        painter.save()
+        painter.setTransform(QTransform().translate(0, height // 2),
+                             combine=True)
+        self.bottom(painter, width, height // 2)
+        painter.restore()
+
+
+class Overlay():
+
+    def __init__(self, top, bottom):
+        self.top = top
+        self.bottom = bottom
+
+    def __call__(self, painter, width, height):
+        self.bottom(painter, width, height)
+        self.top(painter, width, height)
 
 
 class SlidingWindow():
@@ -182,18 +208,26 @@ if __name__ == "__main__":
             ])),
         TrayIcon(
             app, 32, 32,
-            SplitGraph(
-                ScaledGraph(disk, QColorConstants.Red,
-                            lambda sample: sample.write_bytes),
-                ScaledGraph(disk, QColorConstants.Green,
-                            lambda sample: sample.read_bytes))),
+            VerticalSplit(
+                Overlay(
+                    TextGraph(disk, lambda sample: sample.write_bytes),
+                    ScaledGraph(disk, QColorConstants.Red,
+                                lambda sample: sample.write_bytes)),
+                Overlay(
+                    TextGraph(disk, lambda sample: sample.read_bytes),
+                    ScaledGraph(disk, QColorConstants.Green,
+                                lambda sample: sample.read_bytes)))),
         TrayIcon(
             app, 32, 32,
-            SplitGraph(
-                ScaledGraph(net, QColorConstants.Red,
-                            lambda sample: sample.bytes_sent),
-                ScaledGraph(net, QColorConstants.Green,
-                            lambda sample: sample.bytes_recv))),
+            VerticalSplit(
+                Overlay(
+                    TextGraph(net, lambda sample: sample.bytes_sent),
+                    ScaledGraph(net, QColorConstants.Red,
+                                lambda sample: sample.bytes_sent)),
+                Overlay(
+                    TextGraph(net, lambda sample: sample.bytes_recv),
+                    ScaledGraph(net, QColorConstants.Green,
+                                lambda sample: sample.bytes_recv)))),
     ]
 
     sys.exit(app.exec_())
