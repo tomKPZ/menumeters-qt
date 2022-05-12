@@ -44,6 +44,9 @@ class Graph:
                 )
                 offset += val_height
 
+    def contains(self, x):
+        return self.samples.contains(x)
+
 
 class Text:
     def __init__(self, samples, formatter, font, size, color, flags):
@@ -69,6 +72,9 @@ class Text:
             self.formatter(next(iter(self.samples))),
         )
 
+    def contains(self, x):
+        return self.samples.contains(x)
+
 
 class VSplit:
     def __init__(self, top, bottom):
@@ -84,6 +90,9 @@ class VSplit:
         self.bottom(painter, width, height // 2)
         painter.restore()
 
+    def contains(self, x):
+        return self.top.contains(x) or self.bottom.contains(x)
+
 
 class Overlay:
     def __init__(self, top, bottom):
@@ -93,6 +102,9 @@ class Overlay:
     def __call__(self, painter, width, height):
         self.bottom(painter, width, height)
         self.top(painter, width, height)
+
+    def contains(self, x):
+        return self.top.contains(x) or self.bottom.contains(x)
 
 
 class SlidingWindow:
@@ -153,10 +165,9 @@ class Normalize:
         return [x / total for x in sample]
 
 
-class Sampler(SlidingWindow):
+class Sampler:
     def __init__(self, interval, window, sample):
-        super().__init__(window)
-
+        self.window = SlidingWindow(window)
         self.sample = sample
 
         self.timer = QTimer()
@@ -164,11 +175,20 @@ class Sampler(SlidingWindow):
         self.timer.start(interval)
 
     def timeout(self):
-        self.push(self.sample())
+        self.window.push(self.sample())
 
-        # TODO: Redraw only the icons that are necessary.
         for icon in tray_icons:
-            icon.draw()
+            if icon.painter.contains(self):
+                icon.draw()
+
+    def __len__(self):
+        return len(self.window)
+
+    def __iter__(self):
+        return iter(self.window)
+
+    def contains(self, x):
+        return self is x
 
 
 class Index:
@@ -183,6 +203,9 @@ class Index:
         for sample in self.sampler:
             yield sample[self.index]
 
+    def contains(self, x):
+        return self.sampler.contains(x)
+
 
 class List:
     def __init__(self, sampler):
@@ -195,6 +218,9 @@ class List:
         for sample in self.sampler:
             yield [sample]
 
+    def contains(self, x):
+        return self.sampler.contains(x)
+
 
 class TrayIcon:
     def __init__(self, width, height, painter):
@@ -204,7 +230,6 @@ class TrayIcon:
 
         self.tray = QSystemTrayIcon()
         self.pixmap = QPixmap(self.width, self.height)
-        self.samples = SlidingWindow(width)
 
         right_menu = QMenu()
         action = QAction("Exit", right_menu)
