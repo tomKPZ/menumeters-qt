@@ -41,14 +41,10 @@ class Graph:
 
     def __call__(self, painter, width, height):
         try:
-            total = max(sum(sample) for sample in self.samples)
-        except ValueError:
+            scale = 1 / max(sum(sample) for sample in self.samples)
+        except (ValueError, ZeroDivisionError):
             return
-        if total == 0:
-            return
-        scale = 1 / total
         for i, sample in enumerate(self.samples):
-            total = sum(sample)
             offset = 0
             col = width - i - 1
             for color, val in zip(self.colors, sample):
