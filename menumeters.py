@@ -59,9 +59,10 @@ class Graph():
 
 class Text():
 
-    def __init__(self, samples, attr):
+    def __init__(self, samples, attr, flags):
         self.samples = samples
         self.attr = attr
+        self.flags = flags
 
     def __call__(self, painter, width, height):
         if not self.samples:
@@ -70,7 +71,7 @@ class Text():
         painter.setPen(QColor.fromRgba(0xffffffff))
         painter.setFont(QFont('monospace', 8))
         painter.drawText(
-            0, 0, width, height, Qt.AlignCenter,
+            0, 0, width, height, self.flags,
             format_bytes(getattr(
                 (next(iter(self.samples))), self.attr)) + '/s')
 
@@ -215,16 +216,16 @@ if __name__ == "__main__":
         TrayIcon(
             app, 32, 32,
             VSplit(
-                Overlay(Text(disk, 'write_bytes'),
+                Overlay(Text(disk, 'write_bytes', Qt.AlignCenter),
                         Graph(disk, 0xffff0000, 'write_bytes')),
-                Overlay(Text(disk, 'read_bytes'),
+                Overlay(Text(disk, 'read_bytes', Qt.AlignCenter),
                         Graph(disk, 0xff00ff00, 'read_bytes')))),
         TrayIcon(
             app, 32, 32,
             VSplit(
-                Overlay(Text(net, 'bytes_sent'),
+                Overlay(Text(net, 'bytes_sent', Qt.AlignCenter),
                         Graph(net, 0xffff0000, 'bytes_sent')),
-                Overlay(Text(net, 'bytes_recv'),
+                Overlay(Text(net, 'bytes_recv', Qt.AlignCenter),
                         Graph(net, 0xff00ff00, 'bytes_recv')))),
     ]
 
