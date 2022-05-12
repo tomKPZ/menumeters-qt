@@ -44,17 +44,20 @@ class Graph():
 
 class Text():
 
-    def __init__(self, samples, flags, formatter):
+    def __init__(self, samples, formatter, font, size, color, flags):
         self.samples = samples
-        self.flags = flags
         self.formatter = formatter
+        self.font = font
+        self.size = size
+        self.color = color
+        self.flags = flags
 
     def __call__(self, painter, width, height):
         if not self.samples:
             return
 
-        painter.setPen(QColor.fromRgba(0xffffffff))
-        painter.setFont(QFont('monospace', 10))
+        painter.setPen(QColor.fromRgba(self.color))
+        painter.setFont(QFont(self.font, self.size))
         painter.drawText(0, 0, width, height, self.flags,
                          self.formatter(next(iter(self.samples))))
 
@@ -248,14 +251,19 @@ if __name__ == "__main__":
     net_sent = Index(net, 0)
     net_recv = Index(net, 1)
 
-    def format_bytes_n(sample):
-        return format_bytes(sample)[0]
-
-    def format_bytes_units(sample):
-        return format_bytes(sample)[1] + '/s'
-
-    bytes_n = Qt.AlignRight | Qt.AlignVCenter, format_bytes_n
-    bytes_units = Qt.AlignLeft | Qt.AlignVCenter, format_bytes_units
+    text_format = {
+        'font': 'monospace',
+        'size': 10,
+        'color': 0xffffffff,
+    }
+    rate = text_format | {
+        'formatter': lambda sample: format_bytes(sample)[0],
+        'flags': Qt.AlignRight | Qt.AlignVCenter,
+    }
+    rate_units = text_format | {
+        'formatter': lambda sample: format_bytes(sample)[1] + '/s',
+        'flags': Qt.AlignLeft | Qt.AlignVCenter,
+    }
 
     tray_icons = [
         TrayIcon(32, 32, Graph(cpu, [0xff0000ff, 0xff00ffff, 0x00000000])),
@@ -265,22 +273,21 @@ if __name__ == "__main__":
             VSplit(Graph(List(disk_write), [0xffff0000]),
                    Graph(List(disk_read), [0xff00ff00]))),
         TrayIcon(32, 32,
-                 VSplit(Text(disk_write, *bytes_n), Text(disk_read,
-                                                         *bytes_n))),
+                 VSplit(Text(disk_write, **rate), Text(disk_read, **rate))),
         TrayIcon(
             32, 32,
-            VSplit(Text(disk_write, *bytes_units),
-                   Text(disk_read, *bytes_units))),
+            VSplit(Text(disk_write, **rate_units),
+                   Text(disk_read, **rate_units))),
         TrayIcon(
             32, 32,
             VSplit(Graph(List(net_sent), [0xffff0000]),
                    Graph(List(net_recv), [0xff00ff00]))),
-        TrayIcon(32, 32,
-                 VSplit(Text(net_sent, *bytes_n), Text(net_recv, *bytes_n))),
+        TrayIcon(32, 32, VSplit(Text(net_sent, **rate), Text(net_recv,
+                                                             **rate))),
         TrayIcon(
             32, 32,
-            VSplit(Text(net_sent, *bytes_units), Text(net_recv,
-                                                      *bytes_units))),
+            VSplit(Text(net_sent, **rate_units), Text(net_recv,
+                                                      **rate_units))),
     ]
 
     sys.exit(app.exec_())
