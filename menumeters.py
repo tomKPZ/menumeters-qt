@@ -39,7 +39,7 @@ class StackedGraph():
                 offset += val_height
 
 
-class ScaledGraph():
+class Graph():
 
     def __init__(self, samples, color, attr):
         self.samples = samples
@@ -58,7 +58,7 @@ class ScaledGraph():
             painter.drawLine(QLineF(col, height, col, height - val_height))
 
 
-class TextGraph():
+class Text():
 
     def __init__(self, samples, attr):
         self.samples = samples
@@ -72,11 +72,11 @@ class TextGraph():
         painter.setFont(QFont('monospace', 8))
         painter.drawText(
             0, 0, width, height, Qt.AlignCenter,
-            format_bytes(
-                getattr((next(iter(self.samples))), self.attr)) + '/s')
+            format_bytes(getattr(
+                (next(iter(self.samples))), self.attr)) + '/s')
 
 
-class VerticalSplit():
+class VSplit():
 
     def __init__(self, top, bottom):
         self.top = top
@@ -215,20 +215,18 @@ if __name__ == "__main__":
             ])),
         TrayIcon(
             app, 32, 32,
-            VerticalSplit(
-                Overlay(TextGraph(disk, 'write_bytes'),
-                        ScaledGraph(disk, QColorConstants.Red, 'write_bytes')),
-                Overlay(TextGraph(disk, 'read_bytes'),
-                        ScaledGraph(disk, QColorConstants.Green,
-                                    'read_bytes')))),
+            VSplit(
+                Overlay(Text(disk, 'write_bytes'),
+                        Graph(disk, QColorConstants.Red, 'write_bytes')),
+                Overlay(Text(disk, 'read_bytes'),
+                        Graph(disk, QColorConstants.Green, 'read_bytes')))),
         TrayIcon(
             app, 32, 32,
-            VerticalSplit(
-                Overlay(TextGraph(net, 'bytes_sent'),
-                        ScaledGraph(net, QColorConstants.Red, 'bytes_sent')),
-                Overlay(TextGraph(net, 'bytes_recv'),
-                        ScaledGraph(net, QColorConstants.Green,
-                                    'bytes_recv')))),
+            VSplit(
+                Overlay(Text(net, 'bytes_sent'),
+                        Graph(net, QColorConstants.Red, 'bytes_sent')),
+                Overlay(Text(net, 'bytes_recv'),
+                        Graph(net, QColorConstants.Green, 'bytes_recv')))),
     ]
 
     sys.exit(app.exec_())
