@@ -18,6 +18,22 @@ def format_bytes(bytes):
     return f"{bytes:.3g}", f"{prefix}B"
 
 
+class SlidingWindow:
+    def __init__(self, size):
+        self.len = 0
+        self.end = 0
+        self.window = [None] * size
+
+    def push(self, x):
+        self.window[self.end] = x
+        self.end = (self.end + 1) % len(self.window)
+        self.len = min(len(self.window), self.len + 1)
+
+    def __iter__(self):
+        for i in range(self.len):
+            yield self.window[(self.end - i - 1) % len(self.window)]
+
+
 class Graph:
     def __init__(self, samples, colors):
         self.samples = samples
@@ -108,20 +124,27 @@ class Overlay:
         return self.top.contains(x) or self.bottom.contains(x)
 
 
-class SlidingWindow:
-    def __init__(self, size):
-        self.len = 0
-        self.end = 0
-        self.window = [None] * size
+class Sampler:
+    def __init__(self, interval, window, sample):
+        self.window = SlidingWindow(window)
+        self.sample = sample
 
-    def push(self, x):
-        self.window[self.end] = x
-        self.end = (self.end + 1) % len(self.window)
-        self.len = min(len(self.window), self.len + 1)
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.timeout)
+        self.timer.start(interval)
+
+    def timeout(self):
+        self.window.push(self.sample())
+
+        for icon in tray_icons:
+            if icon.painter.contains(self):
+                icon.draw()
 
     def __iter__(self):
-        for i in range(self.len):
-            yield self.window[(self.end - i - 1) % len(self.window)]
+        return iter(self.window)
+
+    def contains(self, x):
+        return self is x
 
 
 class Rate:
@@ -161,29 +184,6 @@ class Normalize:
         sample = self.sampler()
         total = sum(sample)
         return [x / total for x in sample]
-
-
-class Sampler:
-    def __init__(self, interval, window, sample):
-        self.window = SlidingWindow(window)
-        self.sample = sample
-
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.timeout)
-        self.timer.start(interval)
-
-    def timeout(self):
-        self.window.push(self.sample())
-
-        for icon in tray_icons:
-            if icon.painter.contains(self):
-                icon.draw()
-
-    def __iter__(self):
-        return iter(self.window)
-
-    def contains(self, x):
-        return self is x
 
 
 class Index:
