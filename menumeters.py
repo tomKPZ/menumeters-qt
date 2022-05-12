@@ -24,9 +24,10 @@ class Graph:
         self.colors = colors
 
     def __call__(self, painter, width, height):
-        if not self.samples:
+        try:
+            total = max(sum(sample) for sample in self.samples)
+        except ValueError:
             return
-        total = max(sum(sample) for sample in self.samples)
         if total == 0:
             return
         scale = 1 / total
@@ -58,7 +59,7 @@ class Text:
         self.flags = flags
 
     def __call__(self, painter, width, height):
-        if not self.samples:
+        if next(iter(self.samples), None) is None:
             return
 
         painter.setPen(QColor.fromRgba(self.color))
@@ -117,9 +118,6 @@ class SlidingWindow:
         self.window[self.end] = x
         self.end = (self.end + 1) % len(self.window)
         self.len = min(len(self.window), self.len + 1)
-
-    def __len__(self):
-        return self.len
 
     def __iter__(self):
         for i in range(self.len):
@@ -181,9 +179,6 @@ class Sampler:
             if icon.painter.contains(self):
                 icon.draw()
 
-    def __len__(self):
-        return len(self.window)
-
     def __iter__(self):
         return iter(self.window)
 
@@ -196,9 +191,6 @@ class Index:
         self.sampler = sampler
         self.index = index
 
-    def __len__(self):
-        return len(self.sampler)
-
     def __iter__(self):
         for sample in self.sampler:
             yield sample[self.index]
@@ -210,9 +202,6 @@ class Index:
 class List:
     def __init__(self, sampler):
         self.sampler = sampler
-
-    def __len__(self):
-        return len(self.sampler)
 
     def __iter__(self):
         for sample in self.sampler:
