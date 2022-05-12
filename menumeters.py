@@ -190,12 +190,12 @@ class Index():
 
 class TrayIcon():
 
-    def __init__(self, parent, width, height, painter):
+    def __init__(self, width, height, painter):
         self.width = width
         self.height = height
         self.painter = painter
 
-        self.tray = QSystemTrayIcon(parent)
+        self.tray = QSystemTrayIcon()
         self.pixmap = QPixmap(self.width, self.height)
         self.samples = SlidingWindow(width)
 
@@ -255,27 +255,26 @@ if __name__ == "__main__":
     bytes_units = Qt.AlignLeft | Qt.AlignVCenter, format_bytes_units
 
     tray_icons = [
-        TrayIcon(app, 32, 32, Graph(cpu,
-                                    [0xff0000ff, 0xff00ffff, 0x00000000])),
-        TrayIcon(app, 32, 32, Graph(mem, [0xff00ff00, 0x00000000])),
+        TrayIcon(32, 32, Graph(cpu, [0xff0000ff, 0xff00ffff, 0x00000000])),
+        TrayIcon(32, 32, Graph(mem, [0xff00ff00, 0x00000000])),
         TrayIcon(
-            app, 32, 32,
+            32, 32,
             VSplit(Graph(disk_write, 0xffff0000), Graph(disk_read,
                                                         0xff00ff00))),
-        TrayIcon(app, 32, 32,
+        TrayIcon(32, 32,
                  VSplit(Text(disk_write, *bytes_n), Text(disk_read,
                                                          *bytes_n))),
         TrayIcon(
-            app, 32, 32,
+            32, 32,
             VSplit(Text(disk_write, *bytes_units),
                    Text(disk_read, *bytes_units))),
         TrayIcon(
-            app, 32, 32,
+            32, 32,
             VSplit(Graph(net_sent, 0xffff0000), Graph(net_recv, 0xff00ff00))),
-        TrayIcon(app, 32, 32,
+        TrayIcon(32, 32,
                  VSplit(Text(net_sent, *bytes_n), Text(net_recv, *bytes_n))),
         TrayIcon(
-            app, 32, 32,
+            32, 32,
             VSplit(Text(net_sent, *bytes_units), Text(net_recv,
                                                       *bytes_units))),
     ]
