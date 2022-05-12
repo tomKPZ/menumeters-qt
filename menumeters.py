@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import collections
 import psutil
 import sys
 import time
@@ -26,18 +25,15 @@ class Graph():
     def __call__(self, painter, width, height):
         if not self.samples:
             return
-        total = max(
-            sum(getattr(sample, attr) for (_, attr) in self.colors)
-            for sample in self.samples)
+        total = max(sum(sample) for sample in self._samples())
         if total == 0:
             return
         scale = 1 / total
-        for i, sample in enumerate(self.samples):
+        for i, sample in enumerate(self._samples()):
             total = sum(sample)
             offset = 0
             col = width - i - 1
-            for color, attr in self.colors:
-                val = getattr(sample, attr)
+            for color, val in zip(self._colors(), sample):
                 painter.setPen(QColor.fromRgba(color))
                 val_height = val * scale * height
                 painter.drawLine(
@@ -45,12 +41,21 @@ class Graph():
                            height - offset - val_height))
                 offset += val_height
 
+    def _colors(self):
+        if type(self.colors) is list:
+            return self.colors
+        return [self.colors]
+
+    def _samples(self):
+        if type(self.colors) is list:
+            return self.samples
+        return [[x] for x in self.samples]
+
 
 class Text():
 
-    def __init__(self, samples, attr, flags, formatter):
+    def __init__(self, samples, flags, formatter):
         self.samples = samples
-        self.attr = attr
         self.flags = flags
         self.formatter = formatter
 
@@ -60,9 +65,8 @@ class Text():
 
         painter.setPen(QColor.fromRgba(0xffffffff))
         painter.setFont(QFont('monospace', 10))
-        painter.drawText(
-            0, 0, width, height, self.flags,
-            self.formatter(getattr((next(iter(self.samples))), self.attr)))
+        painter.drawText(0, 0, width, height, self.flags,
+                         self.formatter(next(iter(self.samples))))
 
 
 class VSplit():
@@ -121,10 +125,10 @@ class RateSample():
     def __call__(self):
         sample = self.sampler()
         ts = time.monotonic()
-        delta = [(s2 - s1) / (ts - self.prev_ts)
-                 for (s1, s2) in zip(self.prev, sample)]
+        rate = [(s2 - s1) / (ts - self.prev_ts)
+                for (s1, s2) in zip(self.prev, sample)]
         self.prev, self.prev_ts = sample, ts
-        return type(sample)._make(delta)
+        return rate
 
 
 class Sampler(SlidingWindow):
@@ -144,6 +148,20 @@ class Sampler(SlidingWindow):
         # TODO: Redraw only the icons that are necessary.
         for icon in tray_icons:
             icon.draw()
+
+
+class Index():
+
+    def __init__(self, sampler, index):
+        self.sampler = sampler
+        self.index = index
+
+    def __len__(self):
+        return len(self.sampler)
+
+    def __iter__(self):
+        for sample in self.sampler:
+            yield sample[self.index]
 
 
 class TrayIcon():
@@ -177,16 +195,31 @@ class TrayIcon():
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    MemorySample = collections.namedtuple('MemorySample', ['used', 'free'])
+    def cpu_sample():
+        cpu = psutil.cpu_times()
+        return cpu.system, cpu.user, cpu.idle
 
-    def memory_sample():
+    def mem_sample():
         mem = psutil.virtual_memory()
-        return MemorySample(mem.total - mem.available, mem.available)
+        return mem.total - mem.available, mem.available
 
-    cpu = Sampler(100, 32, RateSample(psutil.cpu_times))
-    mem = Sampler(100, 32, memory_sample)
-    disk = Sampler(100, 32, RateSample(psutil.disk_io_counters))
-    net = Sampler(100, 32, RateSample(psutil.net_io_counters))
+    def disk_sample():
+        disk = psutil.disk_io_counters()
+        return disk.write_bytes, disk.read_bytes
+
+    def net_sample():
+        net = psutil.net_io_counters()
+        return net.bytes_sent, net.bytes_recv
+
+    cpu = Sampler(100, 32, RateSample(cpu_sample))
+    mem = Sampler(100, 32, mem_sample)
+    disk = Sampler(100, 32, RateSample(disk_sample))
+    net = Sampler(100, 32, RateSample(net_sample))
+
+    disk_write = Index(disk, 0)
+    disk_read = Index(disk, 1)
+    net_sent = Index(net, 0)
+    net_recv = Index(net, 1)
 
     def format_bytes_n(sample):
         return format_bytes(sample)[0]
@@ -198,42 +231,29 @@ if __name__ == "__main__":
     bytes_units = Qt.AlignLeft | Qt.AlignVCenter, format_bytes_units
 
     tray_icons = [
+        TrayIcon(app, 32, 32, Graph(cpu,
+                                    [0xff0000ff, 0xff00ffff, 0x00000000])),
+        TrayIcon(app, 32, 32, Graph(mem, [0xff00ff00, 0x00000000])),
         TrayIcon(
             app, 32, 32,
-            Graph(cpu, [
-                (0xff0000ff, 'system'),
-                (0xff00ffff, 'user'),
-                (0x00000000, 'idle'),
-            ])),
+            VSplit(Graph(disk_write, 0xffff0000), Graph(disk_read,
+                                                        0xff00ff00))),
         TrayIcon(app, 32, 32,
-                 Graph(mem, [
-                     (0xff00ff00, 'used'),
-                     (0x00000000, 'free'),
-                 ])),
+                 VSplit(Text(disk_write, *bytes_n), Text(disk_read,
+                                                         *bytes_n))),
         TrayIcon(
             app, 32, 32,
-            VSplit(Graph(disk, [(0xffff0000, 'write_bytes')]),
-                   Graph(disk, [(0xff00ff00, 'read_bytes')]))),
+            VSplit(Text(disk_write, *bytes_units),
+                   Text(disk_read, *bytes_units))),
         TrayIcon(
             app, 32, 32,
-            VSplit(Text(disk, 'write_bytes', *bytes_n),
-                   Text(disk, 'read_bytes', *bytes_n))),
+            VSplit(Graph(net_sent, 0xffff0000), Graph(net_recv, 0xff00ff00))),
+        TrayIcon(app, 32, 32,
+                 VSplit(Text(net_sent, *bytes_n), Text(net_recv, *bytes_n))),
         TrayIcon(
             app, 32, 32,
-            VSplit(Text(disk, 'write_bytes', *bytes_units),
-                   Text(disk, 'read_bytes', *bytes_units))),
-        TrayIcon(
-            app, 32, 32,
-            VSplit(Graph(net, [(0xffff0000, 'bytes_sent')]),
-                   Graph(net, [(0xff00ff00, 'bytes_recv')]))),
-        TrayIcon(
-            app, 32, 32,
-            VSplit(Text(net, 'bytes_sent', *bytes_n),
-                   Text(net, 'bytes_recv', *bytes_n))),
-        TrayIcon(
-            app, 32, 32,
-            VSplit(Text(net, 'bytes_sent', *bytes_units),
-                   Text(net, 'bytes_recv', *bytes_units))),
+            VSplit(Text(net_sent, *bytes_units), Text(net_recv,
+                                                      *bytes_units))),
     ]
 
     sys.exit(app.exec_())
