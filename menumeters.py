@@ -157,7 +157,7 @@ class Rate:
             for (s1, s2) in zip(self.prev, sample)
         ]
         self.prev, self.prev_ts = sample, ts
-        return rate
+        return type(sample)._make(rate)
 
 
 class Delta:
@@ -169,7 +169,7 @@ class Delta:
         sample = self.sampler()
         rate = [(s2 - s1) for (s1, s2) in zip(self.prev, sample)]
         self.prev = sample
-        return rate
+        return type(sample)._make(rate)
 
 
 class Normalize:
@@ -179,7 +179,7 @@ class Normalize:
     def __call__(self):
         sample = self.sampler()
         total = sum(sample)
-        return [x / total for x in sample]
+        return type(sample)._make(x / total for x in sample)
 
 
 class Index:
@@ -236,26 +236,31 @@ class TrayIcon:
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    def cpu_sample():
-        cpu = psutil.cpu_times()
+    cpu_sample = Normalize(Delta(psutil.cpu_times))
+    mem_sample = psutil.virtual_memory
+    disk_sample = Rate(psutil.disk_io_counters)
+    net_sample = Rate(psutil.net_io_counters)
+
+    def cpu_convert():
+        cpu = cpu_sample()
         return cpu.system, cpu.user, cpu.idle
 
-    def mem_sample():
-        mem = psutil.virtual_memory()
+    def mem_convert():
+        mem = mem_sample()
         return mem.total - mem.available, mem.available
 
-    def disk_sample():
-        disk = psutil.disk_io_counters()
+    def disk_convert():
+        disk = disk_sample()
         return disk.write_bytes, disk.read_bytes
 
-    def net_sample():
-        net = psutil.net_io_counters()
+    def net_convert():
+        net = net_sample()
         return net.bytes_sent, net.bytes_recv
 
-    cpu = Sampler(100, 32, Normalize(Delta(cpu_sample)))
-    mem = Sampler(100, 32, mem_sample)
-    disk = Sampler(100, 32, Rate(disk_sample))
-    net = Sampler(100, 32, Rate(net_sample))
+    cpu = Sampler(100, 32, cpu_convert)
+    mem = Sampler(100, 32, mem_convert)
+    disk = Sampler(100, 32, disk_convert)
+    net = Sampler(100, 32, net_convert)
 
     disk_w = Index(disk, 0)
     disk_r = Index(disk, 1)
