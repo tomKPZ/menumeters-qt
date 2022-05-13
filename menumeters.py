@@ -121,16 +121,17 @@ class Overlay:
 
 
 class Sampler:
-    def __init__(self, interval, window, sample):
+    def __init__(self, interval, window, sample, convert):
         self.window = SlidingWindow(window)
         self.sample = sample
+        self.convert = convert
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.timeout)
         self.timer.start(interval)
 
     def timeout(self):
-        self.window.push(self.sample())
+        self.window.push(self.convert(self.sample()))
 
         for icon in tray_icons:
             if icon.painter.contains(self):
@@ -241,26 +242,12 @@ if __name__ == "__main__":
     disk_sample = Rate(psutil.disk_io_counters)
     net_sample = Rate(psutil.net_io_counters)
 
-    def cpu_convert():
-        cpu = cpu_sample()
-        return cpu.system, cpu.user, cpu.idle
-
-    def mem_convert():
-        mem = mem_sample()
-        return mem.total - mem.available, mem.available
-
-    def disk_convert():
-        disk = disk_sample()
-        return disk.write_bytes, disk.read_bytes
-
-    def net_convert():
-        net = net_sample()
-        return net.bytes_sent, net.bytes_recv
-
-    cpu = Sampler(100, 32, cpu_convert)
-    mem = Sampler(100, 32, mem_convert)
-    disk = Sampler(100, 32, disk_convert)
-    net = Sampler(100, 32, net_convert)
+    cpu = Sampler(100, 32, cpu_sample, lambda s: (s.system, s.user, s.idle))
+    mem = Sampler(
+        100, 32, mem_sample, lambda s: (s.total - s.available, s.available)
+    )
+    disk = Sampler(100, 32, lambda s: (s.write_bytes, s.read_bytes))
+    net = Sampler(100, 32, lambda s: (s.bytes_sent, s.bytes_recv))
 
     disk_w = Index(disk, 0)
     disk_r = Index(disk, 1)
