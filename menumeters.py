@@ -125,10 +125,20 @@ class Overlay:
         return self.top.contains(x) or self.bottom.contains(x)
 
 
+class Store:
+    def __init__(self, sampler):
+        self.sampler = sampler
+        self.prev = None
+
+    def __call__(self):
+        self.prev = self.sampler()
+        return self.prev
+
+
 class Sampler:
     def __init__(self, interval, window, sample, convert):
         self.window = SlidingWindow(window)
-        self.sample = sample
+        self.sample = Store(sample)
         self.convert = convert
 
         self.timer = QTimer()
@@ -164,16 +174,6 @@ class Rate:
         ]
         self.prev, self.prev_ts = sample, ts
         return type(sample)._make(rate)
-
-
-class Store:
-    def __init__(self, sampler):
-        self.sampler = sampler
-        self.prev = None
-
-    def __call__(self):
-        self.prev = self.sampler()
-        return self.prev
 
 
 class Index:
@@ -230,10 +230,10 @@ class TrayIcon:
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    cpu_sample = Store(Rate(psutil.cpu_times))
-    mem_sample = Store(psutil.virtual_memory)
-    disk_sample = Store(Rate(psutil.disk_io_counters))
-    net_sample = Store(Rate(psutil.net_io_counters))
+    cpu_sample = Rate(psutil.cpu_times)
+    mem_sample = psutil.virtual_memory
+    disk_sample = Rate(psutil.disk_io_counters)
+    net_sample = Rate(psutil.net_io_counters)
 
     cpu = Sampler(
         100, 32, cpu_sample, lambda s: normalize([s.system, s.user, s.idle])
