@@ -18,6 +18,11 @@ def format_bytes(bytes):
     return f"{bytes:.3g}", f"{prefix}B"
 
 
+def normalize(sample):
+    total = sum(sample)
+    return [x / total for x in sample]
+
+
 class SlidingWindow:
     def __init__(self, size):
         self.len = 0
@@ -161,26 +166,14 @@ class Rate:
         return type(sample)._make(rate)
 
 
-class Delta:
+class Store:
     def __init__(self, sampler):
         self.sampler = sampler
+        self.prev = None
+
+    def __call__(self):
         self.prev = self.sampler()
-
-    def __call__(self):
-        sample = self.sampler()
-        rate = [(s2 - s1) for (s1, s2) in zip(self.prev, sample)]
-        self.prev = sample
-        return type(sample)._make(rate)
-
-
-class Normalize:
-    def __init__(self, sampler):
-        self.sampler = sampler
-
-    def __call__(self):
-        sample = self.sampler()
-        total = sum(sample)
-        return type(sample)._make(x / total for x in sample)
+        return self.prev
 
 
 class Index:
@@ -237,17 +230,21 @@ class TrayIcon:
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    cpu_sample = Normalize(Delta(psutil.cpu_times))
-    mem_sample = psutil.virtual_memory
-    disk_sample = Rate(psutil.disk_io_counters)
-    net_sample = Rate(psutil.net_io_counters)
+    cpu_sample = Store(Rate(psutil.cpu_times))
+    mem_sample = Store(psutil.virtual_memory)
+    disk_sample = Store(Rate(psutil.disk_io_counters))
+    net_sample = Store(Rate(psutil.net_io_counters))
 
-    cpu = Sampler(100, 32, cpu_sample, lambda s: (s.system, s.user, s.idle))
+    cpu = Sampler(
+        100, 32, cpu_sample, lambda s: normalize([s.system, s.user, s.idle])
+    )
     mem = Sampler(
         100, 32, mem_sample, lambda s: (s.total - s.available, s.available)
     )
-    disk = Sampler(100, 32, lambda s: (s.write_bytes, s.read_bytes))
-    net = Sampler(100, 32, lambda s: (s.bytes_sent, s.bytes_recv))
+    disk = Sampler(
+        100, 32, disk_sample, lambda s: (s.write_bytes, s.read_bytes)
+    )
+    net = Sampler(100, 32, net_sample, lambda s: (s.bytes_sent, s.bytes_recv))
 
     disk_w = Index(disk, 0)
     disk_r = Index(disk, 1)
