@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
+import itertools
 import sys
 import time
 
 import psutil
-from PyQt5.QtCore import QLineF, Qt, QTimer
+from PyQt5.QtCore import QPointF, Qt, QTimer
 from PyQt5.QtGui import (QColor, QColorConstants, QFont, QIcon, QPainter,
-                         QPixmap, QTransform)
+                         QPixmap, QPolygonF, QTransform)
 from PyQt5.QtWidgets import QAction, QApplication, QMenu, QSystemTrayIcon
 
 
@@ -16,6 +17,10 @@ def format_bytes(bytes):
             break
         bytes /= 1000
     return f"{bytes:4.3g}", f"{prefix}B"
+
+
+def lerp(x, in_min, in_max, out_min, out_max):
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
 
 
 def normalize(sample):
@@ -88,25 +93,31 @@ class Graph:
         self.colors = colors
 
     def __call__(self, painter, width, height):
-        total = max(sum(sample) for sample in self.samples())
+        samples = list(self.samples())
+        samples.reverse()
+        total = max(sum(sample[1]) for sample in samples)
         if total == 0:
             return
         scale = 1 / total
 
+        left = samples[0][0]
+        right = samples[-1][0]
+
+        series = [[] for _ in range(1 + len(self.colors))]
+        for ts, sample in self.samples():
+            x = lerp(ts, left, right, 0, width)
+            y = height
+            for val, row in zip(sample, series):
+                row.append(QPointF(x, y))
+                y -= val * scale * height
+            series[-1].append(QPointF(x, y))
+
         painter.save()
+        painter.setPen(QColorConstants.Transparent)
         painter.setCompositionMode(QPainter.CompositionMode_Plus)
-        for i, sample in enumerate(self.samples()):
-            offset = 0
-            col = width - i - 1
-            for color, val in zip(self.colors, sample):
-                painter.setPen(QColor.fromRgba(color))
-                val_height = val * scale * height
-                painter.drawLine(
-                    QLineF(
-                        col, height - offset, col, height - offset - val_height
-                    )
-                )
-                offset += val_height
+        for color, (lo, hi) in zip(self.colors, itertools.pairwise(series)):
+            painter.setBrush(QColor.fromRgba(color))
+            painter.drawPolygon(QPolygonF(lo + list(reversed(hi))))
         painter.restore()
 
 
@@ -120,7 +131,7 @@ class Text:
         self.flags = flags
 
     def __call__(self, painter, width, height):
-        text = self.formatter(next(self.samples())[0])
+        text = self.formatter(next(self.samples())[1][0])
         painter.setPen(QColor.fromRgba(self.color))
         painter.setFont(QFont(self.font, self.size))
         painter.drawText(0, 0, width, height, self.flags, text)
@@ -227,28 +238,28 @@ if __name__ == "__main__":
                 yield f"{val:6.1f}/s {format_name(name)}"
 
     def cpu_graph():
-        for _, s in cpu.window:
-            yield normalize([s.system, s.user, s.idle])
+        for ts, s in cpu.window:
+            yield ts, normalize([s.system, s.user, s.idle])
 
     def mem_graph():
-        for _, s in mem.window:
-            yield s.total - s.available, s.available
+        for ts, s in mem.window:
+            yield ts, (s.total - s.available, s.available)
 
     def disk_w():
-        for _, s in disk.window:
-            yield s.write_bytes,
+        for ts, s in disk.window:
+            yield ts, (s.write_bytes,)
 
     def disk_r():
-        for _, s in disk.window:
-            yield s.read_bytes,
+        for ts, s in disk.window:
+            yield ts, (s.read_bytes,)
 
     def net_ul():
-        for _, s in net.window:
-            yield s.bytes_sent,
+        for ts, s in net.window:
+            yield ts, (s.bytes_sent,)
 
     def net_dl():
-        for _, s in net.window:
-            yield s.bytes_recv,
+        for ts, s in net.window:
+            yield ts, (s.bytes_recv,)
 
     text_format = {
         "font": "monospace",
