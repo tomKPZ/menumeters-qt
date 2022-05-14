@@ -237,18 +237,35 @@ if __name__ == "__main__":
     disk_sample = Store(Rate(psutil.disk_io_counters))
     net_sample = Store(Rate(psutil.net_io_counters))
 
+    def format_name(name):
+        return name.title().replace("_", " ")
+
+    def menu_bytes(val):
+        bytes, units = format_bytes(val)
+        if len(units) == 1:
+            bytes = " " + bytes
+        return f"{bytes}{units}"
+
     def cpu_menu():
         n = psutil.cpu_count()
         for name, val in cpu_sample.prev._asdict().items():
-            yield f"{val/n:6.1%} {name.title()}"
+            yield f"{val/n:6.1%} {format_name(name)}"
 
     def mem_menu():
         sample = mem_sample.prev
         for name, val in sample._asdict().items():
             if name == "percent":
                 name, val = "unavailable", sample.total - sample.available
-            bytes, units = format_bytes(val)
-            yield f"{bytes}{units} {name.title()}"
+            yield f"{menu_bytes(val)} {format_name(name)}"
+
+    def disk_menu():
+        for name, val in disk_sample.prev._asdict().items():
+            if name.endswith("bytes"):
+                yield f"{menu_bytes(val)}/s {format_name(name)}"
+            elif name.endswith("time"):
+                yield f"{val/1000:8.1%} {format_name(name)}"
+            elif name.endswith("count"):
+                yield f"{val:6.1f}/s {format_name(name)}"
 
     cpu = Sampler(
         1000, 32, cpu_sample, lambda s: normalize([s.system, s.user, s.idle])
@@ -294,15 +311,15 @@ if __name__ == "__main__":
                 graph_one(disk_w, 0xFFFF0000),
                 graph_one(disk_r, 0xFF00FF00),
             ),
-            cpu_menu,
+            disk_menu,
         ),
         icon(
             VSplit(Text(disk_w, **text_rate), Text(disk_r, **text_rate)),
-            cpu_menu,
+            disk_menu,
         ),
         icon(
             VSplit(Text(disk_w, **text_units), Text(disk_r, **text_units)),
-            cpu_menu,
+            disk_menu,
         ),
         icon(
             VSplit(
