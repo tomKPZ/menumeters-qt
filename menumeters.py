@@ -15,7 +15,7 @@ def format_bytes(bytes):
         if bytes < 1000:
             break
         bytes /= 1000
-    return f"{bytes:.3g}", f"{prefix}B"
+    return f"{bytes:4.3g}", f"{prefix}B"
 
 
 def normalize(sample):
@@ -242,6 +242,14 @@ if __name__ == "__main__":
         for name, val in cpu_sample.prev._asdict().items():
             yield f"{val/n:6.1%} {name.title()}"
 
+    def mem_menu():
+        sample = mem_sample.prev
+        for name, val in sample._asdict().items():
+            if name == "percent":
+                name, val = "unavailable", sample.total - sample.available
+            bytes, units = format_bytes(val)
+            yield f"{bytes}{units} {name.title()}"
+
     cpu = Sampler(
         1000, 32, cpu_sample, lambda s: normalize([s.system, s.user, s.idle])
     )
@@ -280,7 +288,7 @@ if __name__ == "__main__":
 
     tray_icons = [
         icon(Graph(cpu, [0xFF0000FF, 0xFF00FFFF, 0x00000000]), cpu_menu),
-        icon(Graph(mem, [0xFF00FF00, 0x00000000]), cpu_menu),
+        icon(Graph(mem, [0xFF00FF00, 0x00000000]), mem_menu),
         icon(
             VSplit(
                 graph_one(disk_w, 0xFFFF0000),
