@@ -77,6 +77,7 @@ class Sampler:
         self.icons = icons
 
         self.timer = QTimer()
+        self.timer.setTimerType(Qt.CoarseTimer)
         self.timer.timeout.connect(self.timeout)
         self.timer.start(interval)
 
