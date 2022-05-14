@@ -79,16 +79,10 @@ class Text:
         if next(iter(self.samples), None) is None:
             return
 
+        text = self.formatter(next(iter(self.samples)))
         painter.setPen(QColor.fromRgba(self.color))
         painter.setFont(QFont(self.font, self.size))
-        painter.drawText(
-            0,
-            0,
-            width,
-            height,
-            self.flags,
-            self.formatter(next(iter(self.samples))),
-        )
+        painter.drawText(0, 0, width, height, self.flags, text)
 
     def contains(self, x):
         return self.samples.contains(x)
@@ -138,12 +132,13 @@ class Store:
 class Sampler:
     def __init__(self, interval, window, sample, convert):
         self.window = SlidingWindow(window)
-        self.sample = Store(sample)
+        self.sample = sample
         self.convert = convert
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.timeout)
         self.timer.start(interval)
+        self.window.push(self.convert(self.sample()))
 
     def timeout(self):
         self.window.push(self.convert(self.sample()))
@@ -202,19 +197,23 @@ class List:
 
 
 class TrayIcon:
-    def __init__(self, width, height, painter):
+    def __init__(self, width, height, painter, menuitems):
         self.width = width
         self.height = height
         self.painter = painter
+        self.menuitems = menuitems
 
         self.tray = QSystemTrayIcon()
         self.pixmap = QPixmap(self.width, self.height)
 
-        right_menu = QMenu()
-        action = QAction("Exit", right_menu)
+        self.right_menu = QMenu()
+        for text in self.menuitems():
+            self.right_menu.addAction(text)
+        self.right_menu.addSeparator()
+        action = QAction("Exit", self.right_menu)
         action.triggered.connect(lambda: QApplication.exit(0))
-        right_menu.addAction(action)
-        self.tray.setContextMenu(right_menu)
+        self.right_menu.addAction(action)
+        self.tray.setContextMenu(self.right_menu)
 
         self.draw()
         self.tray.show()
@@ -226,25 +225,33 @@ class TrayIcon:
             self.painter(painter, self.width, self.height)
         self.tray.setIcon(QIcon(self.pixmap))
 
+        for text, action in zip(self.menuitems(), self.right_menu.actions()):
+            action.setText(text)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    cpu_sample = Rate(psutil.cpu_times)
-    mem_sample = psutil.virtual_memory
-    disk_sample = Rate(psutil.disk_io_counters)
-    net_sample = Rate(psutil.net_io_counters)
+    cpu_sample = Store(Rate(psutil.cpu_times))
+    mem_sample = Store(psutil.virtual_memory)
+    disk_sample = Store(Rate(psutil.disk_io_counters))
+    net_sample = Store(Rate(psutil.net_io_counters))
+
+    def cpu_menu():
+        n = psutil.cpu_count()
+        for name, val in cpu_sample.prev._asdict().items():
+            yield f"{val/n:6.1%} {name.title()}"
 
     cpu = Sampler(
-        100, 32, cpu_sample, lambda s: normalize([s.system, s.user, s.idle])
+        1000, 32, cpu_sample, lambda s: normalize([s.system, s.user, s.idle])
     )
     mem = Sampler(
-        100, 32, mem_sample, lambda s: (s.total - s.available, s.available)
+        1000, 32, mem_sample, lambda s: (s.total - s.available, s.available)
     )
     disk = Sampler(
-        100, 32, disk_sample, lambda s: (s.write_bytes, s.read_bytes)
+        1000, 32, disk_sample, lambda s: (s.write_bytes, s.read_bytes)
     )
-    net = Sampler(100, 32, net_sample, lambda s: (s.bytes_sent, s.bytes_recv))
+    net = Sampler(1000, 32, net_sample, lambda s: (s.bytes_sent, s.bytes_recv))
 
     disk_w = Index(disk, 0)
     disk_r = Index(disk, 1)
@@ -272,27 +279,40 @@ if __name__ == "__main__":
         return Graph(List(sampler), [color])
 
     tray_icons = [
-        icon(Graph(cpu, [0xFF0000FF, 0xFF00FFFF, 0x00000000])),
-        icon(Graph(mem, [0xFF00FF00, 0x00000000])),
+        icon(Graph(cpu, [0xFF0000FF, 0xFF00FFFF, 0x00000000]), cpu_menu),
+        icon(Graph(mem, [0xFF00FF00, 0x00000000]), cpu_menu),
         icon(
             VSplit(
                 graph_one(disk_w, 0xFFFF0000),
                 graph_one(disk_r, 0xFF00FF00),
             ),
+            cpu_menu,
         ),
-        icon(VSplit(Text(disk_w, **text_rate), Text(disk_r, **text_rate))),
+        icon(
+            VSplit(Text(disk_w, **text_rate), Text(disk_r, **text_rate)),
+            cpu_menu,
+        ),
         icon(
             VSplit(Text(disk_w, **text_units), Text(disk_r, **text_units)),
+            cpu_menu,
         ),
         icon(
             VSplit(
                 graph_one(net_ul, 0xFFFF0000),
                 graph_one(net_dl, 0xFF00FF00),
             ),
+            cpu_menu,
         ),
-        icon(VSplit(Text(net_ul, **text_rate), Text(net_dl, **text_rate))),
         icon(
-            VSplit(Text(net_ul, **text_units), Text(net_dl, **text_units)),
+            VSplit(Text(net_ul, **text_rate), Text(net_dl, **text_rate)),
+            cpu_menu,
+        ),
+        icon(
+            VSplit(
+                Text(net_ul, **text_units),
+                Text(net_dl, **text_units),
+            ),
+            cpu_menu,
         ),
     ]
 
