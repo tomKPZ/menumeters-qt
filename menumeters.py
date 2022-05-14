@@ -30,8 +30,8 @@ def normalize(sample):
     return [x / total for x in sample]
 
 
-def timestamp(it):
-    for x in it:
+def timestamp(fn):
+    for x in iter(fn, None):
         yield time.monotonic(), x
 
 
@@ -85,7 +85,7 @@ class Sampler:
         self.data_source.push()
 
         for icon in self.icons:
-            icon.draw()
+            icon.update()
 
 
 class Graph:
@@ -93,7 +93,7 @@ class Graph:
         self.samples = samples
         self.colors = colors
 
-    def __call__(self, painter, width, height):
+    def paint(self, painter, width, height):
         samples = list(self.samples())
         samples.reverse()
         total = max(sum(sample[1]) for sample in samples)
@@ -131,7 +131,7 @@ class Text:
         self.color = color
         self.flags = flags
 
-    def __call__(self, painter, width, height):
+    def paint(self, painter, width, height):
         text = self.formatter(next(self.samples())[1][0])
         painter.setPen(QColor.fromRgba(self.color))
         painter.setFont(QFont(self.font, self.size))
@@ -143,13 +143,13 @@ class VSplit:
         self.top = top
         self.bottom = bottom
 
-    def __call__(self, painter, width, height):
-        self.top(painter, width, height // 2)
+    def paint(self, painter, width, height):
+        self.top.paint(painter, width, height // 2)
         painter.save()
         painter.setTransform(
             QTransform().translate(0, height // 2), combine=True
         )
-        self.bottom(painter, width, height // 2)
+        self.bottom.paint(painter, width, height // 2)
         painter.restore()
 
 
@@ -172,14 +172,14 @@ class TrayIcon:
         self.right_menu.addAction(action)
         self.tray.setContextMenu(self.right_menu)
 
-        self.draw()
+        self.update()
         self.tray.show()
 
-    def draw(self):
+    def update(self):
         self.pixmap.fill(QColorConstants.Transparent)
         with QPainter(self.pixmap) as painter:
             painter.setRenderHints(QPainter.Antialiasing)
-            self.painter(painter, self.width, self.height)
+            self.painter.paint(painter, self.width, self.height)
         self.tray.setIcon(QIcon(self.pixmap))
 
         for text, action in zip(self.menuitems(), self.right_menu.actions()):
@@ -190,13 +190,10 @@ class TrayIcon:
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    def timestamp_iter(fn):
-        return timestamp(iter(fn, None))
-
-    cpu = DataSource(32, rate(timestamp_iter(psutil.cpu_times)))
-    mem = DataSource(32, timestamp_iter(psutil.virtual_memory))
-    disk = DataSource(32, rate(timestamp_iter(psutil.disk_io_counters)))
-    net = DataSource(32, rate(timestamp_iter(psutil.net_io_counters)))
+    cpu = DataSource(32, rate(timestamp(psutil.cpu_times)))
+    mem = DataSource(32, timestamp(psutil.virtual_memory))
+    disk = DataSource(32, rate(timestamp(psutil.disk_io_counters)))
+    net = DataSource(32, rate(timestamp(psutil.net_io_counters)))
 
     def format_name(name):
         return name.title().replace("_", " ")
@@ -238,29 +235,19 @@ if __name__ == "__main__":
             else:
                 yield f"{val:6.1f}/s {format_name(name)}"
 
-    def cpu_graph():
-        for ts, s in cpu.window:
-            yield ts, normalize([s.system, s.user, s.idle])
+    def graph(source, mapper):
+        def impl():
+            for ts, s in source.window:
+                yield ts, mapper(s)
 
-    def mem_graph():
-        for ts, s in mem.window:
-            yield ts, (s.total - s.available, s.available)
+        return impl
 
-    def disk_w():
-        for ts, s in disk.window:
-            yield ts, (s.write_bytes,)
-
-    def disk_r():
-        for ts, s in disk.window:
-            yield ts, (s.read_bytes,)
-
-    def net_ul():
-        for ts, s in net.window:
-            yield ts, (s.bytes_sent,)
-
-    def net_dl():
-        for ts, s in net.window:
-            yield ts, (s.bytes_recv,)
+    cpu_graph = graph(cpu, lambda s: normalize([s.system, s.user, s.idle]))
+    mem_graph = graph(mem, lambda s: (s.total - s.available, s.available))
+    disk_w = graph(disk, lambda s: (s.write_bytes,))
+    disk_r = graph(disk, lambda s: (s.read_bytes,))
+    net_ul = graph(net, lambda s: (s.bytes_sent,))
+    net_dl = graph(net, lambda s: (s.bytes_recv,))
 
     text_format = {
         "font": "monospace",
