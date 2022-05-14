@@ -227,6 +227,7 @@ class TrayIcon:
 
         for text, action in zip(self.menuitems(), self.right_menu.actions()):
             action.setText(text)
+            action.setEnabled(False)
 
 
 if __name__ == "__main__":
