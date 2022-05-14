@@ -267,6 +267,13 @@ if __name__ == "__main__":
             elif name.endswith("count"):
                 yield f"{val:6.1f}/s {format_name(name)}"
 
+    def net_menu():
+        for name, val in net_sample.prev._asdict().items():
+            if name.startswith("bytes"):
+                yield f"{menu_bytes(val)}/s {format_name(name)}"
+            else:
+                yield f"{val:6.1f}/s {format_name(name)}"
+
     cpu = Sampler(
         1000, 32, cpu_sample, lambda s: normalize([s.system, s.user, s.idle])
     )
@@ -326,18 +333,18 @@ if __name__ == "__main__":
                 graph_one(net_ul, 0xFFFF0000),
                 graph_one(net_dl, 0xFF00FF00),
             ),
-            cpu_menu,
+            net_menu,
         ),
         icon(
             VSplit(Text(net_ul, **text_rate), Text(net_dl, **text_rate)),
-            cpu_menu,
+            net_menu,
         ),
         icon(
             VSplit(
                 Text(net_ul, **text_units),
                 Text(net_dl, **text_units),
             ),
-            cpu_menu,
+            net_menu,
         ),
     ]
 
