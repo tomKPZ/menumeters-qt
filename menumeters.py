@@ -20,7 +20,21 @@ def format_bytes(bytes):
 
 def normalize(sample):
     total = sum(sample)
+    if total == 0:
+        return [0] * len(sample)
     return [x / total for x in sample]
+
+
+def timestamp(it):
+    for x in it:
+        yield time.monotonic(), x
+
+
+def rate(it):
+    pt, px = next(it)
+    for t, x in it:
+        yield t, type(x)._make((s2 - s1) / (t - pt) for (s1, s2) in zip(px, x))
+        pt, px = t, x
 
 
 class SlidingWindow:
@@ -39,17 +53,49 @@ class SlidingWindow:
             yield self.window[(self.end - i - 1) % len(self.window)]
 
 
+class DataSource:
+    def __init__(self, window, source):
+        self.window = SlidingWindow(window)
+        self.source = source
+
+        # Prime with 2 samples for graph rendering.
+        for _ in range(2):
+            self.push()
+
+    def push(self):
+        self.window.push(next(self.source))
+
+
+class Sampler:
+    def __init__(self, interval, data_source, icons):
+        self.data_source = data_source
+        self.icons = icons
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.timeout)
+        self.timer.start(interval)
+
+    def timeout(self):
+        self.data_source.push()
+
+        for icon in self.icons:
+            icon.draw()
+
+
 class Graph:
     def __init__(self, samples, colors):
         self.samples = samples
         self.colors = colors
 
     def __call__(self, painter, width, height):
-        try:
-            scale = 1 / max(sum(sample) for sample in self.samples)
-        except (ValueError, ZeroDivisionError):
+        total = max(sum(sample) for sample in self.samples())
+        if total == 0:
             return
-        for i, sample in enumerate(self.samples):
+        scale = 1 / total
+
+        painter.save()
+        painter.setCompositionMode(QPainter.CompositionMode_Plus)
+        for i, sample in enumerate(self.samples()):
             offset = 0
             col = width - i - 1
             for color, val in zip(self.colors, sample):
@@ -61,9 +107,7 @@ class Graph:
                     )
                 )
                 offset += val_height
-
-    def contains(self, x):
-        return self.samples.contains(x)
+        painter.restore()
 
 
 class Text:
@@ -76,16 +120,10 @@ class Text:
         self.flags = flags
 
     def __call__(self, painter, width, height):
-        if next(iter(self.samples), None) is None:
-            return
-
-        text = self.formatter(next(iter(self.samples)))
+        text = self.formatter(next(self.samples())[0])
         painter.setPen(QColor.fromRgba(self.color))
         painter.setFont(QFont(self.font, self.size))
         painter.drawText(0, 0, width, height, self.flags, text)
-
-    def contains(self, x):
-        return self.samples.contains(x)
 
 
 class VSplit:
@@ -101,99 +139,6 @@ class VSplit:
         )
         self.bottom(painter, width, height // 2)
         painter.restore()
-
-    def contains(self, x):
-        return self.top.contains(x) or self.bottom.contains(x)
-
-
-class Overlay:
-    def __init__(self, top, bottom):
-        self.top = top
-        self.bottom = bottom
-
-    def __call__(self, painter, width, height):
-        self.bottom(painter, width, height)
-        self.top(painter, width, height)
-
-    def contains(self, x):
-        return self.top.contains(x) or self.bottom.contains(x)
-
-
-class Store:
-    def __init__(self, sampler):
-        self.sampler = sampler
-        self.prev = None
-
-    def __call__(self):
-        self.prev = self.sampler()
-        return self.prev
-
-
-class Sampler:
-    def __init__(self, interval, window, sample, convert):
-        self.window = SlidingWindow(window)
-        self.sample = sample
-        self.convert = convert
-
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.timeout)
-        self.timer.start(interval)
-        self.window.push(self.convert(self.sample()))
-
-    def timeout(self):
-        self.window.push(self.convert(self.sample()))
-
-        for icon in tray_icons:
-            if icon.painter.contains(self):
-                icon.draw()
-
-    def __iter__(self):
-        return iter(self.window)
-
-    def contains(self, x):
-        return self is x
-
-
-class Rate:
-    def __init__(self, sampler):
-        self.sampler = sampler
-        self.prev = self.sampler()
-        self.prev_ts = time.monotonic()
-
-    def __call__(self):
-        sample = self.sampler()
-        ts = time.monotonic()
-        rate = [
-            (s2 - s1) / (ts - self.prev_ts)
-            for (s1, s2) in zip(self.prev, sample)
-        ]
-        self.prev, self.prev_ts = sample, ts
-        return type(sample)._make(rate)
-
-
-class Index:
-    def __init__(self, sampler, index):
-        self.sampler = sampler
-        self.index = index
-
-    def __iter__(self):
-        for sample in self.sampler:
-            yield sample[self.index]
-
-    def contains(self, x):
-        return self.sampler.contains(x)
-
-
-class List:
-    def __init__(self, sampler):
-        self.sampler = sampler
-
-    def __iter__(self):
-        for sample in self.sampler:
-            yield [sample]
-
-    def contains(self, x):
-        return self.sampler.contains(x)
 
 
 class TrayIcon:
@@ -233,10 +178,13 @@ class TrayIcon:
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    cpu_sample = Store(Rate(psutil.cpu_times))
-    mem_sample = Store(psutil.virtual_memory)
-    disk_sample = Store(Rate(psutil.disk_io_counters))
-    net_sample = Store(Rate(psutil.net_io_counters))
+    def timestamp_iter(fn):
+        return timestamp(iter(fn, None))
+
+    cpu = DataSource(32, rate(timestamp_iter(psutil.cpu_times)))
+    mem = DataSource(32, timestamp_iter(psutil.virtual_memory))
+    disk = DataSource(32, rate(timestamp_iter(psutil.disk_io_counters)))
+    net = DataSource(32, rate(timestamp_iter(psutil.net_io_counters)))
 
     def format_name(name):
         return name.title().replace("_", " ")
@@ -247,20 +195,23 @@ if __name__ == "__main__":
             bytes = " " + bytes
         return f"{bytes}{units}"
 
+    def last(sampler):
+        return next(iter(sampler.window))[1]
+
     def cpu_menu():
         n = psutil.cpu_count()
-        for name, val in cpu_sample.prev._asdict().items():
+        for name, val in last(cpu)._asdict().items():
             yield f"{val/n:6.1%} {format_name(name)}"
 
     def mem_menu():
-        sample = mem_sample.prev
+        sample = last(mem)
         for name, val in sample._asdict().items():
             if name == "percent":
                 name, val = "unavailable", sample.total - sample.available
             yield f"{menu_bytes(val)} {format_name(name)}"
 
     def disk_menu():
-        for name, val in disk_sample.prev._asdict().items():
+        for name, val in last(disk)._asdict().items():
             if name.endswith("bytes"):
                 yield f"{menu_bytes(val)}/s {format_name(name)}"
             elif name.endswith("time"):
@@ -269,27 +220,35 @@ if __name__ == "__main__":
                 yield f"{val:6.1f}/s {format_name(name)}"
 
     def net_menu():
-        for name, val in net_sample.prev._asdict().items():
+        for name, val in last(net)._asdict().items():
             if name.startswith("bytes"):
                 yield f"{menu_bytes(val)}/s {format_name(name)}"
             else:
                 yield f"{val:6.1f}/s {format_name(name)}"
 
-    cpu = Sampler(
-        1000, 32, cpu_sample, lambda s: normalize([s.system, s.user, s.idle])
-    )
-    mem = Sampler(
-        1000, 32, mem_sample, lambda s: (s.total - s.available, s.available)
-    )
-    disk = Sampler(
-        1000, 32, disk_sample, lambda s: (s.write_bytes, s.read_bytes)
-    )
-    net = Sampler(1000, 32, net_sample, lambda s: (s.bytes_sent, s.bytes_recv))
+    def cpu_graph():
+        for _, s in cpu.window:
+            yield normalize([s.system, s.user, s.idle])
 
-    disk_w = Index(disk, 0)
-    disk_r = Index(disk, 1)
-    net_ul = Index(net, 0)
-    net_dl = Index(net, 1)
+    def mem_graph():
+        for _, s in mem.window:
+            yield s.total - s.available, s.available
+
+    def disk_w():
+        for _, s in disk.window:
+            yield s.write_bytes,
+
+    def disk_r():
+        for _, s in disk.window:
+            yield s.read_bytes,
+
+    def net_ul():
+        for _, s in net.window:
+            yield s.bytes_sent,
+
+    def net_dl():
+        for _, s in net.window:
+            yield s.bytes_recv,
 
     text_format = {
         "font": "monospace",
@@ -308,45 +267,50 @@ if __name__ == "__main__":
     def icon(*args, **kwargs):
         return TrayIcon(32, 32, *args, **kwargs)
 
-    def graph_one(sampler, color):
-        return Graph(List(sampler), [color])
+    cpu_icon = icon(
+        Graph(cpu_graph, [0xFF0000FF, 0xFF00FFFF, 0x00000000]), cpu_menu
+    )
 
-    tray_icons = [
-        icon(Graph(cpu, [0xFF0000FF, 0xFF00FFFF, 0x00000000]), cpu_menu),
-        icon(Graph(mem, [0xFF00FF00, 0x00000000]), mem_menu),
-        icon(
-            VSplit(
-                graph_one(disk_w, 0xFFFF0000),
-                graph_one(disk_r, 0xFF00FF00),
-            ),
-            disk_menu,
+    mem_icon = icon(Graph(mem_graph, [0xFF00FF00, 0x00000000]), mem_menu)
+    disk_icon = icon(
+        VSplit(
+            Graph(disk_w, [0xFFFF0000]),
+            Graph(disk_r, [0xFF00FF00]),
         ),
-        icon(
-            VSplit(Text(disk_w, **text_rate), Text(disk_r, **text_rate)),
-            disk_menu,
+        disk_menu,
+    )
+    disk_rate = icon(
+        VSplit(Text(disk_w, **text_rate), Text(disk_r, **text_rate)),
+        disk_menu,
+    )
+    disk_units = icon(
+        VSplit(Text(disk_w, **text_units), Text(disk_r, **text_units)),
+        disk_menu,
+    )
+    net_icon = icon(
+        VSplit(
+            Graph(net_ul, [0xFFFF0000]),
+            Graph(net_dl, [0xFF00FF00]),
         ),
-        icon(
-            VSplit(Text(disk_w, **text_units), Text(disk_r, **text_units)),
-            disk_menu,
+        net_menu,
+    )
+    net_rate = icon(
+        VSplit(Text(net_ul, **text_rate), Text(net_dl, **text_rate)),
+        net_menu,
+    )
+    net_units = icon(
+        VSplit(
+            Text(net_ul, **text_units),
+            Text(net_dl, **text_units),
         ),
-        icon(
-            VSplit(
-                graph_one(net_ul, 0xFFFF0000),
-                graph_one(net_dl, 0xFF00FF00),
-            ),
-            net_menu,
-        ),
-        icon(
-            VSplit(Text(net_ul, **text_rate), Text(net_dl, **text_rate)),
-            net_menu,
-        ),
-        icon(
-            VSplit(
-                Text(net_ul, **text_units),
-                Text(net_dl, **text_units),
-            ),
-            net_menu,
-        ),
+        net_menu,
+    )
+
+    samplers = [
+        Sampler(100, cpu, [cpu_icon]),
+        Sampler(100, mem, [mem_icon]),
+        Sampler(100, disk, [disk_icon, disk_rate, disk_units]),
+        Sampler(100, net, [net_icon, net_rate, net_units]),
     ]
 
     sys.exit(app.exec_())
