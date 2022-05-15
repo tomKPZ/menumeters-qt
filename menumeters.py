@@ -361,10 +361,10 @@ net_units = TrayIcon(
 )
 
 samplers = [
-    Sampler(100, cpu, [cpu_icon]),
-    Sampler(100, mem, [mem_icon]),
-    Sampler(100, disk, [disk_icon, disk_rate, disk_units]),
-    Sampler(100, net, [net_icon, net_rate, net_units]),
+    Sampler(1000, cpu, [cpu_icon]),
+    Sampler(3000, mem, [mem_icon]),
+    Sampler(2000, disk, [disk_icon, disk_rate, disk_units]),
+    Sampler(2000, net, [net_icon, net_rate, net_units]),
 ]
 
 sys.exit(app.exec_())
