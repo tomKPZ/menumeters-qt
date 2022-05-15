@@ -151,6 +151,16 @@ class VSplit:
         painter.restore()
 
 
+class Overlay:
+    def __init__(self, top, bottom):
+        self.top = top
+        self.bottom = bottom
+
+    def paint(self, painter, width, height):
+        self.bottom.paint(painter, width, height)
+        self.top.paint(painter, width, height)
+
+
 class TrayIcon:
     def __init__(self, width, height, painter, menuitems):
         self.width = width
@@ -275,17 +285,37 @@ text_units = text_format | {
     "formatter": lambda sample: format_bytes(sample)[1] + "/s",
     "flags": Qt.AlignLeft | Qt.AlignVCenter,
 }
+symbol_format = {
+    "font": "monospace",
+    "size": 12,
+    "color": 0x60FFFFFF,
+    "flags": Qt.AlignLeft | Qt.AlignTop,
+}
 
 cpu_icon = TrayIcon(
-    *SIZE, Graph(cpu_graph, [0xFF0000FF, 0xFF00FFFF, 0x00000000]), cpu_menu
+    *SIZE,
+    Overlay(
+        Graph(cpu_graph, [0xFF0000FF, 0xFF00FFFF, 0x00000000]),
+        Text(lambda: "", **symbol_format),
+    ),
+    cpu_menu,
 )
 mem_icon = TrayIcon(
-    *SIZE, Graph(mem_graph, [0xFF00FF00, 0x00000000]), mem_menu)
+    *SIZE,
+    Overlay(
+        Graph(mem_graph, [0xFF00FF00, 0x00000000]),
+        Text(lambda: "", **symbol_format),
+    ),
+    mem_menu,
+)
 disk_icon = TrayIcon(
     *SIZE,
-    VSplit(
-        Graph(disk_w, [0xFFFF0000]),
-        Graph(disk_r, [0xFF00FF00]),
+    Overlay(
+        VSplit(
+            Graph(disk_w, [0xFFFF0000]),
+            Graph(disk_r, [0xFF00FF00]),
+        ),
+        Text(lambda: "", **symbol_format),
     ),
     disk_menu,
 )
@@ -305,9 +335,12 @@ disk_units = TrayIcon(
 )
 net_icon = TrayIcon(
     *SIZE,
-    VSplit(
-        Graph(net_ul, [0xFFFF0000]),
-        Graph(net_dl, [0xFF00FF00]),
+    Overlay(
+        VSplit(
+            Graph(net_ul, [0xFFFF0000]),
+            Graph(net_dl, [0xFF00FF00]),
+        ),
+        Text(lambda: "", **symbol_format),
     ),
     net_menu,
 )
