@@ -297,7 +297,7 @@ cpu_icon = TrayIcon(
     *SIZE,
     Overlay(
         Text(lambda: "", **symbol_format),
-        Graph(cpu_graph, [0xFF0000FF, 0xFF00FFFF, 0x00000000]),
+        Graph(cpu_graph, [0xFFC678DD, 0xFF61AFEF, 0x00000000]),
     ),
     cpu_menu,
     "CPU",
@@ -306,7 +306,7 @@ mem_icon = TrayIcon(
     *SIZE,
     Overlay(
         Text(lambda: "", **symbol_format),
-        Graph(mem_graph, [0xFF00FF00, 0x00000000]),
+        Graph(mem_graph, [0xFF98C379, 0x00000000]),
     ),
     mem_menu,
     "Memory",
@@ -316,8 +316,8 @@ disk_icon = TrayIcon(
     Overlay(
         Text(lambda: "", **symbol_format),
         VSplit(
-            Graph(disk_w, [0xFFFF0000]),
-            Graph(disk_r, [0xFF00FF00]),
+            Graph(disk_w, [0xFFE06C75]),
+            Graph(disk_r, [0xFF98C379]),
         ),
     ),
     disk_menu,
@@ -344,8 +344,8 @@ net_icon = TrayIcon(
     Overlay(
         Text(lambda: "", **symbol_format),
         VSplit(
-            Graph(net_ul, [0xFFFF0000]),
-            Graph(net_dl, [0xFF00FF00]),
+            Graph(net_ul, [0xFFE06C75]),
+            Graph(net_dl, [0xFF98C379]),
         ),
     ),
     net_menu,
