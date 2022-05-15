@@ -53,12 +53,9 @@ class SlidingWindow:
         self.end = (self.end + 1) % len(self.window)
         self.len = min(len(self.window), self.len + 1)
 
-    def last(self):
-        return self.window[(self.end - 1) % len(self.window)]
-
     def __iter__(self):
         for i in range(self.len):
-            yield self.window[(self.end - self.len + i) % len(self.window)]
+            yield self.window[(self.end - i - 1) % len(self.window)]
 
 
 class DataSource:
@@ -103,8 +100,8 @@ class Graph:
             return
         scale = 1 / total
 
-        left = samples[0][0]
-        right = samples[-1][0]
+        left = samples[-1][0]
+        right = samples[0][0]
 
         series = [[] for _ in range(1 + len(self.colors))]
         for ts, sample in self.samples():
@@ -211,7 +208,7 @@ def menu_bytes(val):
 
 
 def menu_data(sampler):
-    return sampler.window.last()[1]
+    return next(iter(sampler.window))[1]
 
 
 def cpu_menu():
