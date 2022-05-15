@@ -162,7 +162,7 @@ class Overlay:
 
 
 class TrayIcon:
-    def __init__(self, width, height, painter, menuitems):
+    def __init__(self, width, height, painter, menuitems, tooltip):
         self.width = width
         self.height = height
         self.painter = painter
@@ -179,6 +179,7 @@ class TrayIcon:
         action.triggered.connect(lambda: QApplication.exit(0))
         self.right_menu.addAction(action)
         self.tray.setContextMenu(self.right_menu)
+        self.tray.setToolTip(tooltip)
 
         self.update()
         self.tray.show()
@@ -299,6 +300,7 @@ cpu_icon = TrayIcon(
         Text(lambda: "", **symbol_format),
     ),
     cpu_menu,
+    "CPU",
 )
 mem_icon = TrayIcon(
     *SIZE,
@@ -307,6 +309,7 @@ mem_icon = TrayIcon(
         Text(lambda: "", **symbol_format),
     ),
     mem_menu,
+    "Memory",
 )
 disk_icon = TrayIcon(
     *SIZE,
@@ -318,6 +321,7 @@ disk_icon = TrayIcon(
         Text(lambda: "", **symbol_format),
     ),
     disk_menu,
+    "Disk",
 )
 disk_rate = TrayIcon(
     *SIZE,
@@ -325,6 +329,7 @@ disk_rate = TrayIcon(
         sampled_text(disk_w, **text_rate), sampled_text(disk_r, **text_rate)
     ),
     disk_menu,
+    "Disk",
 )
 disk_units = TrayIcon(
     *SIZE,
@@ -332,6 +337,7 @@ disk_units = TrayIcon(
         sampled_text(disk_w, **text_units), sampled_text(disk_r, **text_units)
     ),
     disk_menu,
+    "Disk",
 )
 net_icon = TrayIcon(
     *SIZE,
@@ -343,6 +349,7 @@ net_icon = TrayIcon(
         Text(lambda: "", **symbol_format),
     ),
     net_menu,
+    "Network",
 )
 net_rate = TrayIcon(
     *SIZE,
@@ -350,6 +357,7 @@ net_rate = TrayIcon(
         sampled_text(net_ul, **text_rate), sampled_text(net_dl, **text_rate)
     ),
     net_menu,
+    "Network",
 )
 net_units = TrayIcon(
     *SIZE,
@@ -358,6 +366,7 @@ net_units = TrayIcon(
         sampled_text(net_dl, **text_units),
     ),
     net_menu,
+    "Network",
 )
 
 samplers = [
