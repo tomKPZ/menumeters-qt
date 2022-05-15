@@ -42,6 +42,19 @@ def rate(it):
         pt, px = t, x
 
 
+class TestPattern:
+    def paint(self, painter, width, height):
+        painter.save()
+        for x in range(width):
+            for y in range(height):
+                if (x // 4 + y // 4) % 2:
+                    painter.setPen(QColorConstants.White)
+                else:
+                    painter.setPen(QColorConstants.Black)
+                painter.drawPoint(x, y)
+        painter.restore()
+
+
 class SlidingWindow:
     def __init__(self, size):
         self.len = 0
