@@ -125,16 +125,15 @@ class Graph:
 
 
 class Text:
-    def __init__(self, samples, formatter, font, size, color, flags):
-        self.samples = samples
-        self.formatter = formatter
+    def __init__(self, text, font, size, color, flags):
+        self.text = text
         self.font = font
         self.size = size
         self.color = color
         self.flags = flags
 
     def paint(self, painter, width, height):
-        text = self.formatter(next(self.samples())[1][0])
+        text = self.text()
         painter.setPen(QColor.fromRgba(self.color))
         painter.setFont(QFont(self.font, self.size))
         painter.drawText(0, 0, width, height, self.flags, text)
@@ -255,6 +254,10 @@ def graph(source, mapper):
     return impl
 
 
+def sampled_text(samples, formatter, **kwargs):
+    return Text(lambda: formatter(next(samples())[1][0]), **kwargs)
+
+
 cpu_graph = graph(cpu, lambda s: normalize([s.system, s.user, s.idle]))
 mem_graph = graph(mem, lambda s: (s.total - s.available, s.available))
 disk_w = graph(disk, lambda s: (s.write_bytes,))
@@ -291,12 +294,16 @@ disk_icon = TrayIcon(
 )
 disk_rate = TrayIcon(
     *SIZE,
-    VSplit(Text(disk_w, **text_rate), Text(disk_r, **text_rate)),
+    VSplit(
+        sampled_text(disk_w, **text_rate), sampled_text(disk_r, **text_rate)
+    ),
     disk_menu,
 )
 disk_units = TrayIcon(
     *SIZE,
-    VSplit(Text(disk_w, **text_units), Text(disk_r, **text_units)),
+    VSplit(
+        sampled_text(disk_w, **text_units), sampled_text(disk_r, **text_units)
+    ),
     disk_menu,
 )
 net_icon = TrayIcon(
@@ -309,14 +316,16 @@ net_icon = TrayIcon(
 )
 net_rate = TrayIcon(
     *SIZE,
-    VSplit(Text(net_ul, **text_rate), Text(net_dl, **text_rate)),
+    VSplit(
+        sampled_text(net_ul, **text_rate), sampled_text(net_dl, **text_rate)
+    ),
     net_menu,
 )
 net_units = TrayIcon(
     *SIZE,
     VSplit(
-        Text(net_ul, **text_units),
-        Text(net_dl, **text_units),
+        sampled_text(net_ul, **text_units),
+        sampled_text(net_dl, **text_units),
     ),
     net_menu,
 )
