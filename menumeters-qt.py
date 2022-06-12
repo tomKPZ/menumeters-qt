@@ -211,8 +211,8 @@ class TrayIcon:
 
 app = QApplication(sys.argv)
 
-SIZE = (32, 32)
-SAMPLES = 32
+SIZE = (48, 48)
+SAMPLES = 48
 
 cpu = DataSource(SAMPLES, rate(timestamp(psutil.cpu_times)))
 mem = DataSource(SAMPLES, timestamp(psutil.virtual_memory))
@@ -288,7 +288,7 @@ net_dl = graph(net, lambda s: (s.bytes_recv,))
 
 text_format = {
     "font": "monospace",
-    "size": 10,
+    "size": 15,
     "color": 0xFFFFFFFF,
 }
 text_rate = text_format | {
@@ -301,7 +301,7 @@ text_units = text_format | {
 }
 symbol_format = {
     "font": "monospace",
-    "size": 12,
+    "size": 18,
     "color": 0x60FFFFFF,
     "flags": Qt.AlignLeft | Qt.AlignTop,
 }
