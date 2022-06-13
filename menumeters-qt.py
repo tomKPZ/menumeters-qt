@@ -127,7 +127,6 @@ class Graph:
 
         painter.save()
         painter.setPen(QColorConstants.Transparent)
-        painter.setCompositionMode(QPainter.CompositionMode_Plus)
         for color, (lo, hi) in zip(self.colors, itertools.pairwise(series)):
             painter.setBrush(QColor.fromRgba(color))
             painter.drawPolygon(QPolygonF(lo + list(reversed(hi))))
