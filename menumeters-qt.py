@@ -329,8 +329,8 @@ disk_icon = TrayIcon(
     Overlay(
         Text(lambda: "", **symbol_format),
         VSplit(
-            Graph(disk_w, [0xFFE06C75]),
             Graph(disk_r, [0xFF98C379]),
+            Graph(disk_w, [0xFFE06C75]),
         ),
     ),
     disk_menu,
@@ -339,7 +339,7 @@ disk_icon = TrayIcon(
 disk_rate = TrayIcon(
     *SIZE,
     VSplit(
-        sampled_text(disk_w, **text_rate), sampled_text(disk_r, **text_rate)
+        sampled_text(disk_r, **text_rate), sampled_text(disk_w, **text_rate)
     ),
     disk_menu,
     "Disk",
@@ -347,7 +347,7 @@ disk_rate = TrayIcon(
 disk_units = TrayIcon(
     *SIZE,
     VSplit(
-        sampled_text(disk_w, **text_units), sampled_text(disk_r, **text_units)
+        sampled_text(disk_r, **text_units), sampled_text(disk_w, **text_units)
     ),
     disk_menu,
     "Disk",
