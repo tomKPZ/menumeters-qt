@@ -328,8 +328,8 @@ disk_icon = TrayIcon(
     Overlay(
         Text(lambda: "", **symbol_format),
         VSplit(
-            Graph(disk_r, [0xFF98C379]),
-            Graph(disk_w, [0xFFE06C75]),
+            Graph(disk_r, [0xFFE06C75]),
+            Graph(disk_w, [0xFFE5C07B]),
         ),
     ),
     disk_menu,
@@ -357,7 +357,7 @@ net_icon = TrayIcon(
         Text(lambda: "", **symbol_format),
         VSplit(
             Graph(net_ul, [0xFFE06C75]),
-            Graph(net_dl, [0xFF98C379]),
+            Graph(net_dl, [0xFFE5C07B]),
         ),
     ),
     net_menu,
