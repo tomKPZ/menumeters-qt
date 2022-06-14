@@ -275,7 +275,10 @@ def graph(source, mapper):
 
 
 def sampled_text(samples, formatter, **kwargs):
-    return Text(lambda: formatter(next(samples())[1][0]), **kwargs)
+    def max_sample():
+        return max(val[0] for (_, val) in samples())
+
+    return Text(lambda: formatter(max_sample()), **kwargs)
 
 
 cpu_graph = graph(cpu, lambda s: normalize([s.system, s.user, s.idle]))
