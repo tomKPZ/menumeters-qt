@@ -288,7 +288,7 @@ net_dl = graph(net, lambda s: (s.bytes_recv,))
 text_format = {
     "font": "monospace",
     "size": 15,
-    "color": 0xFFFFFFFF,
+    "color": 0xFFABB2BF,
 }
 text_rate = text_format | {
     "formatter": lambda sample: format_bytes(sample)[0],
