@@ -5,10 +5,10 @@ import sys
 import time
 
 import psutil
-from PyQt5.QtCore import QPointF, Qt, QTimer
-from PyQt5.QtGui import (QColor, QColorConstants, QFont, QIcon, QPainter,
-                         QPixmap, QPolygonF, QTransform)
-from PyQt5.QtWidgets import QAction, QApplication, QMenu, QSystemTrayIcon
+from PyQt6.QtCore import QPointF, Qt, QTimer
+from PyQt6.QtGui import (QAction, QColor, QColorConstants, QFont, QIcon,
+                         QPainter, QPixmap, QPolygonF, QTransform)
+from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 
 def format_bytes(bytes):
@@ -16,7 +16,7 @@ def format_bytes(bytes):
         if bytes < 1000:
             break
         bytes /= 1000
-    return f"{bytes:4.3g}", f"{prefix}B"
+    return f"{bytes:4.3g}", f"{prefix}B"  # type: ignore
 
 
 def lerp(x, in_min, in_max, out_min, out_max):
@@ -90,7 +90,7 @@ class Sampler:
         self.icons = icons
 
         self.timer = QTimer()
-        self.timer.setTimerType(Qt.CoarseTimer)
+        self.timer.setTimerType(Qt.TimerType.CoarseTimer)
         self.timer.timeout.connect(self.timeout)
         self.timer.start(interval)
 
@@ -199,7 +199,7 @@ class TrayIcon:
     def update(self):
         self.pixmap.fill(QColorConstants.Transparent)
         with QPainter(self.pixmap) as painter:
-            painter.setRenderHints(QPainter.Antialiasing)
+            painter.setRenderHints(QPainter.RenderHint.Antialiasing)
             self.painter.paint(painter, self.width, self.height)
         self.tray.setIcon(QIcon(self.pixmap))
 
@@ -295,17 +295,17 @@ text_format = {
 }
 text_rate = text_format | {
     "formatter": lambda sample: format_bytes(sample)[0],
-    "flags": Qt.AlignRight | Qt.AlignVCenter,
+    "flags": Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
 }
 text_units = text_format | {
     "formatter": lambda sample: format_bytes(sample)[1] + "/s",
-    "flags": Qt.AlignLeft | Qt.AlignVCenter,
+    "flags": Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
 }
 symbol_format = {
     "font": "monospace",
     "size": 18,
     "color": 0x60FFFFFF,
-    "flags": Qt.AlignLeft | Qt.AlignTop,
+    "flags": Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
 }
 
 cpu_icon = TrayIcon(
@@ -391,4 +391,4 @@ samplers = [
     Sampler(2000, net, [net_icon, net_rate, net_units]),
 ]
 
-sys.exit(app.exec_())
+sys.exit(app.exec())
