@@ -6,8 +6,17 @@ import time
 
 import psutil
 from PyQt6.QtCore import QPointF, Qt, QTimer
-from PyQt6.QtGui import (QAction, QColor, QColorConstants, QFont, QIcon,
-                         QPainter, QPixmap, QPolygonF, QTransform)
+from PyQt6.QtGui import (
+    QAction,
+    QColor,
+    QColorConstants,
+    QFont,
+    QIcon,
+    QPainter,
+    QPixmap,
+    QPolygonF,
+    QTransform,
+)
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 
@@ -156,9 +165,7 @@ class VSplit:
     def paint(self, painter, width, height):
         self.top.paint(painter, width, height // 2)
         painter.save()
-        painter.setTransform(
-            QTransform().translate(0, height // 2), combine=True
-        )
+        painter.setTransform(QTransform().translate(0, height // 2), combine=True)
         self.bottom.paint(painter, width, height // 2)
         painter.restore()
 
@@ -237,7 +244,7 @@ def menu_data(sampler):
 def cpu_menu():
     n = psutil.cpu_count()
     for name, val in menu_data(cpu)._asdict().items():
-        yield f"{val/n:6.1%} {menu_name(name)}"
+        yield f"{val / n:6.1%} {menu_name(name)}"
 
 
 def mem_menu():
@@ -253,7 +260,7 @@ def disk_menu():
         if name.endswith("bytes"):
             yield f"{menu_bytes(val)}/s {menu_name(name)}"
         elif name.endswith("time"):
-            yield f"{val/1000:8.1%} {menu_name(name)}"
+            yield f"{val / 1000:8.1%} {menu_name(name)}"
         elif name.endswith("count"):
             yield f"{val:6.1f}/s {menu_name(name)}"
 
@@ -340,17 +347,13 @@ disk_icon = TrayIcon(
 )
 disk_rate = TrayIcon(
     *SIZE,
-    VSplit(
-        sampled_text(disk_r, **text_rate), sampled_text(disk_w, **text_rate)
-    ),
+    VSplit(sampled_text(disk_r, **text_rate), sampled_text(disk_w, **text_rate)),
     disk_menu,
     "Disk",
 )
 disk_units = TrayIcon(
     *SIZE,
-    VSplit(
-        sampled_text(disk_r, **text_units), sampled_text(disk_w, **text_units)
-    ),
+    VSplit(sampled_text(disk_r, **text_units), sampled_text(disk_w, **text_units)),
     disk_menu,
     "Disk",
 )
@@ -368,9 +371,7 @@ net_icon = TrayIcon(
 )
 net_rate = TrayIcon(
     *SIZE,
-    VSplit(
-        sampled_text(net_ul, **text_rate), sampled_text(net_dl, **text_rate)
-    ),
+    VSplit(sampled_text(net_ul, **text_rate), sampled_text(net_dl, **text_rate)),
     net_menu,
     "Network",
 )
@@ -391,4 +392,10 @@ samplers = [
     Sampler(2000, net, [net_icon, net_rate, net_units]),
 ]
 
-sys.exit(app.exec())
+
+def main():
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
