@@ -215,191 +215,195 @@ class TrayIcon:
             action.setEnabled(False)
 
 
-app = QApplication(sys.argv)
+def config():
+    SIZE = (48, 48)
+    SAMPLES = 48
 
-SIZE = (48, 48)
-SAMPLES = 48
+    cpu = DataSource(SAMPLES, rate(timestamp(psutil.cpu_times)))
+    mem = DataSource(SAMPLES, timestamp(psutil.virtual_memory))
+    disk = DataSource(SAMPLES, rate(timestamp(psutil.disk_io_counters)))
+    net = DataSource(SAMPLES, rate(timestamp(psutil.net_io_counters)))
 
-cpu = DataSource(SAMPLES, rate(timestamp(psutil.cpu_times)))
-mem = DataSource(SAMPLES, timestamp(psutil.virtual_memory))
-disk = DataSource(SAMPLES, rate(timestamp(psutil.disk_io_counters)))
-net = DataSource(SAMPLES, rate(timestamp(psutil.net_io_counters)))
+    def menu_name(name):
+        return name.title().replace("_", " ")
 
+    def menu_bytes(val):
+        bytes, units = format_bytes(val)
+        if len(units) == 1:
+            bytes = " " + bytes
+        return f"{bytes}{units}"
 
-def menu_name(name):
-    return name.title().replace("_", " ")
+    def menu_data(sampler):
+        return next(iter(sampler.window))[1]
 
+    def cpu_menu():
+        n = psutil.cpu_count()
+        for name, val in menu_data(cpu)._asdict().items():
+            yield f"{val / n:6.1%} {menu_name(name)}"
 
-def menu_bytes(val):
-    bytes, units = format_bytes(val)
-    if len(units) == 1:
-        bytes = " " + bytes
-    return f"{bytes}{units}"
+    def mem_menu():
+        sample = menu_data(mem)
+        for name, val in sample._asdict().items():
+            if name == "percent":
+                name, val = "unavailable", sample.total - sample.available
+            yield f"{menu_bytes(val)} {menu_name(name)}"
 
+    def disk_menu():
+        for name, val in menu_data(disk)._asdict().items():
+            if name.endswith("bytes"):
+                yield f"{menu_bytes(val)}/s {menu_name(name)}"
+            elif name.endswith("time"):
+                yield f"{val / 1000:8.1%} {menu_name(name)}"
+            elif name.endswith("count"):
+                yield f"{val:6.1f}/s {menu_name(name)}"
 
-def menu_data(sampler):
-    return next(iter(sampler.window))[1]
+    def net_menu():
+        for name, val in menu_data(net)._asdict().items():
+            if name.startswith("bytes"):
+                yield f"{menu_bytes(val)}/s {menu_name(name)}"
+            else:
+                yield f"{val:6.1f}/s {menu_name(name)}"
 
+    def graph(source, mapper):
+        def impl():
+            for ts, s in source.window:
+                yield ts, mapper(s)
 
-def cpu_menu():
-    n = psutil.cpu_count()
-    for name, val in menu_data(cpu)._asdict().items():
-        yield f"{val / n:6.1%} {menu_name(name)}"
+        return impl
 
+    def sampled_text(samples, formatter, **kwargs):
+        def max_sample():
+            return max(val[0] for (_, val) in samples())
 
-def mem_menu():
-    sample = menu_data(mem)
-    for name, val in sample._asdict().items():
-        if name == "percent":
-            name, val = "unavailable", sample.total - sample.available
-        yield f"{menu_bytes(val)} {menu_name(name)}"
+        return Text(lambda: formatter(max_sample()), **kwargs)
 
+    cpu_graph = graph(cpu, lambda s: normalize([s.system, s.user, s.idle]))
+    mem_graph = graph(mem, lambda s: (s.total - s.available, s.available))
+    disk_w = graph(disk, lambda s: (s.write_bytes,))
+    disk_r = graph(disk, lambda s: (s.read_bytes,))
+    net_ul = graph(net, lambda s: (s.bytes_sent,))
+    net_dl = graph(net, lambda s: (s.bytes_recv,))
 
-def disk_menu():
-    for name, val in menu_data(disk)._asdict().items():
-        if name.endswith("bytes"):
-            yield f"{menu_bytes(val)}/s {menu_name(name)}"
-        elif name.endswith("time"):
-            yield f"{val / 1000:8.1%} {menu_name(name)}"
-        elif name.endswith("count"):
-            yield f"{val:6.1f}/s {menu_name(name)}"
+    text_format = {
+        "font": "monospace",
+        "size": 15,
+        "color": 0xFFABB2BF,
+    }
+    text_rate = text_format | {
+        "formatter": lambda sample: format_bytes(sample)[0],
+        "flags": Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+    }
+    text_units = text_format | {
+        "formatter": lambda sample: format_bytes(sample)[1] + "/s",
+        "flags": Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+    }
+    symbol_format = {
+        "font": "monospace",
+        "size": 18,
+        "color": 0x60FFFFFF,
+        "flags": Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
+    }
 
-
-def net_menu():
-    for name, val in menu_data(net)._asdict().items():
-        if name.startswith("bytes"):
-            yield f"{menu_bytes(val)}/s {menu_name(name)}"
-        else:
-            yield f"{val:6.1f}/s {menu_name(name)}"
-
-
-def graph(source, mapper):
-    def impl():
-        for ts, s in source.window:
-            yield ts, mapper(s)
-
-    return impl
-
-
-def sampled_text(samples, formatter, **kwargs):
-    def max_sample():
-        return max(val[0] for (_, val) in samples())
-
-    return Text(lambda: formatter(max_sample()), **kwargs)
-
-
-cpu_graph = graph(cpu, lambda s: normalize([s.system, s.user, s.idle]))
-mem_graph = graph(mem, lambda s: (s.total - s.available, s.available))
-disk_w = graph(disk, lambda s: (s.write_bytes,))
-disk_r = graph(disk, lambda s: (s.read_bytes,))
-net_ul = graph(net, lambda s: (s.bytes_sent,))
-net_dl = graph(net, lambda s: (s.bytes_recv,))
-
-text_format = {
-    "font": "monospace",
-    "size": 15,
-    "color": 0xFFABB2BF,
-}
-text_rate = text_format | {
-    "formatter": lambda sample: format_bytes(sample)[0],
-    "flags": Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-}
-text_units = text_format | {
-    "formatter": lambda sample: format_bytes(sample)[1] + "/s",
-    "flags": Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-}
-symbol_format = {
-    "font": "monospace",
-    "size": 18,
-    "color": 0x60FFFFFF,
-    "flags": Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
-}
-
-cpu_icon = TrayIcon(
-    *SIZE,
-    Overlay(
-        Text(lambda: "", **symbol_format),
-        Graph(cpu_graph, [0xFFC678DD, 0xFF61AFEF, 0x00000000]),
-    ),
-    cpu_menu,
-    "CPU",
-)
-mem_icon = TrayIcon(
-    *SIZE,
-    Overlay(
-        Text(lambda: "", **symbol_format),
-        Graph(mem_graph, [0xFF98C379, 0x00000000]),
-    ),
-    mem_menu,
-    "Memory",
-)
-disk_icon = TrayIcon(
-    *SIZE,
-    Overlay(
-        Text(lambda: "", **symbol_format),
-        VSplit(
-            Graph(disk_r, [0xFFE06C75]),
-            Graph(disk_w, [0xFFE5C07B]),
+    cpu_icon = TrayIcon(
+        *SIZE,
+        Overlay(
+            Text(lambda: "", **symbol_format),
+            Graph(cpu_graph, [0xFFC678DD, 0xFF61AFEF, 0x00000000]),
         ),
-    ),
-    disk_menu,
-    "Disk",
-)
-disk_rate = TrayIcon(
-    *SIZE,
-    VSplit(sampled_text(disk_r, **text_rate), sampled_text(disk_w, **text_rate)),
-    disk_menu,
-    "Disk",
-)
-disk_units = TrayIcon(
-    *SIZE,
-    VSplit(sampled_text(disk_r, **text_units), sampled_text(disk_w, **text_units)),
-    disk_menu,
-    "Disk",
-)
-net_icon = TrayIcon(
-    *SIZE,
-    Overlay(
-        Text(lambda: "", **symbol_format),
-        VSplit(
-            Graph(net_ul, [0xFFE06C75]),
-            Graph(net_dl, [0xFFE5C07B]),
+        cpu_menu,
+        "CPU",
+    )
+    mem_icon = TrayIcon(
+        *SIZE,
+        Overlay(
+            Text(lambda: "", **symbol_format),
+            Graph(mem_graph, [0xFF98C379, 0x00000000]),
         ),
-    ),
-    net_menu,
-    "Network",
-)
-net_rate = TrayIcon(
-    *SIZE,
-    VSplit(sampled_text(net_ul, **text_rate), sampled_text(net_dl, **text_rate)),
-    net_menu,
-    "Network",
-)
-net_units = TrayIcon(
-    *SIZE,
-    VSplit(
-        sampled_text(net_ul, **text_units),
-        sampled_text(net_dl, **text_units),
-    ),
-    net_menu,
-    "Network",
-)
+        mem_menu,
+        "Memory",
+    )
+    disk_icon = TrayIcon(
+        *SIZE,
+        Overlay(
+            Text(lambda: "", **symbol_format),
+            VSplit(
+                Graph(disk_r, [0xFFE06C75]),
+                Graph(disk_w, [0xFFE5C07B]),
+            ),
+        ),
+        disk_menu,
+        "Disk",
+    )
+    disk_rate = TrayIcon(
+        *SIZE,
+        VSplit(sampled_text(disk_r, **text_rate), sampled_text(disk_w, **text_rate)),
+        disk_menu,
+        "Disk",
+    )
+    disk_units = TrayIcon(
+        *SIZE,
+        VSplit(sampled_text(disk_r, **text_units), sampled_text(disk_w, **text_units)),
+        disk_menu,
+        "Disk",
+    )
+    net_icon = TrayIcon(
+        *SIZE,
+        Overlay(
+            Text(lambda: "", **symbol_format),
+            VSplit(
+                Graph(net_ul, [0xFFE06C75]),
+                Graph(net_dl, [0xFFE5C07B]),
+            ),
+        ),
+        net_menu,
+        "Network",
+    )
+    net_rate = TrayIcon(
+        *SIZE,
+        VSplit(sampled_text(net_ul, **text_rate), sampled_text(net_dl, **text_rate)),
+        net_menu,
+        "Network",
+    )
+    net_units = TrayIcon(
+        *SIZE,
+        VSplit(
+            sampled_text(net_ul, **text_units),
+            sampled_text(net_dl, **text_units),
+        ),
+        net_menu,
+        "Network",
+    )
 
-samplers = [
-    Sampler(1000, cpu, [cpu_icon]),
-    Sampler(3000, mem, [mem_icon]),
-    Sampler(2000, disk, [disk_icon, disk_rate, disk_units]),
-    Sampler(2000, net, [net_icon, net_rate, net_units]),
-]
+    icons = [
+        cpu_icon,
+        mem_icon,
+        disk_icon,
+        disk_rate,
+        disk_units,
+        net_icon,
+        net_rate,
+        net_units,
+    ]
+
+    samplers = [
+        Sampler(1000, cpu, [cpu_icon]),
+        Sampler(3000, mem, [mem_icon]),
+        Sampler(2000, disk, [disk_icon, disk_rate, disk_units]),
+        Sampler(2000, net, [net_icon, net_rate, net_units]),
+    ]
+
+    return icons, samplers
 
 
 def main():
+    app = QApplication(sys.argv)
     for _ in range(50):
         if QSystemTrayIcon.isSystemTrayAvailable():
             break
         time.sleep(0.1)
     else:
         sys.exit(1)
+    icons, samplers = config()
     sys.exit(app.exec())
 
 
