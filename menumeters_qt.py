@@ -394,6 +394,12 @@ samplers = [
 
 
 def main():
+    for _ in range(50):
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            break
+        time.sleep(0.1)
+    else:
+        sys.exit(1)
     sys.exit(app.exec())
 
 
