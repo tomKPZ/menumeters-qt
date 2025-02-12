@@ -1,31 +1,31 @@
 {
   description = "a port of macOS MenuMeters to QT";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
-  outputs = {
-    self,
-    nixpkgs,
-  }: let
-    system = "x86_64-linux";
-    pkgs = import nixpkgs {inherit system;};
-  in {
-    packages.x86_64-linux.default = pkgs.python310Packages.buildPythonApplication {
-      pname = "menumeters-qt";
-      version = "0.1.0";
-      src = self;
+  outputs = { self, nixpkgs, ... }:
+    let
+      system = "x86_64-linux";
+      pkgs = import nixpkgs { inherit system; };
+    in
+    {
+      packages.${system}.default = pkgs.python3Packages.buildPythonApplication {
+        pname = "menumeters-qt";
+        version = "0.1.0";
+        src = self;
+        propagatedBuildInputs = with pkgs.python3Packages; [
+          psutil
+          pyqt6
+        ];
+      };
 
-      propagatedBuildInputs = [
-        pkgs.python310Packages.psutil
-        pkgs.python310Packages.pyqt6
-      ];
+      devShells.${system}.default = pkgs.mkShell {
+        buildInputs = [
+          (pkgs.python3.withPackages (p: with p; [
+            psutil
+            pyqt6
+          ]))
+        ];
+      };
     };
-
-    devShells.x86_64-linux.default = pkgs.mkShell {
-      buildInputs = [
-        pkgs.python310Packages.psutil
-        pkgs.python310Packages.pyqt6
-      ];
-    };
-  };
 }
