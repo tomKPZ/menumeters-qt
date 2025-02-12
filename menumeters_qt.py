@@ -397,12 +397,6 @@ def config():
 
 def main():
     app = QApplication(sys.argv)
-    for _ in range(50):
-        if QSystemTrayIcon.isSystemTrayAvailable():
-            break
-        time.sleep(0.1)
-    else:
-        sys.exit(1)
     icons, samplers = config()
     sys.exit(app.exec())
 
