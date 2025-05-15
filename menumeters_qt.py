@@ -307,7 +307,7 @@ def config():
     cpu_icon = TrayIcon(
         *SIZE,
         Overlay(
-            Text(lambda: "", **symbol_format),
+            Text(lambda: "", **symbol_format),
             Graph(cpu_graph, [0xFFC678DD, 0xFF61AFEF, 0x00000000]),
         ),
         cpu_menu,
@@ -316,7 +316,7 @@ def config():
     mem_icon = TrayIcon(
         *SIZE,
         Overlay(
-            Text(lambda: "", **symbol_format),
+            Text(lambda: "", **symbol_format),
             Graph(mem_graph, [0xFF98C379, 0x00000000]),
         ),
         mem_menu,
@@ -349,7 +349,7 @@ def config():
     net_icon = TrayIcon(
         *SIZE,
         Overlay(
-            Text(lambda: "", **symbol_format),
+            Text(lambda: "󰛳", **symbol_format),
             VSplit(
                 Graph(net_ul, [0xFFE06C75]),
                 Graph(net_dl, [0xFFE5C07B]),
