@@ -17,6 +17,8 @@
           psutil
           pyqt6
         ];
+        pyproject = true;
+        build-system = [ pkgs.python3Packages.setuptools ];
       };
 
       devShells.${system}.default = pkgs.mkShell {
